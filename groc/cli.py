@@ -56,6 +56,13 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--postal-code", "-p", type=_valid_postal_code, help="Restrict to one postal code")
     ask.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
 
+    serve = subparsers.add_parser("serve", help="Run the web UI + API (search and ask)")
+    serve.add_argument("--db", default="groc.db", help="Path to the SQLite database file")
+    serve.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
+    serve.add_argument("--port", type=int, default=5000, help="Port to bind (default: 5000)")
+    serve.add_argument("--debug", action="store_true", help="Run Flask in debug/auto-reload mode")
+    serve.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+
     return parser
 
 
@@ -84,7 +91,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "ask":
         conn = db.connect(args.db)
-        print(chat_ask(conn, args.question, postal_code=args.postal_code))
+        result = chat_ask(conn, args.question, postal_code=args.postal_code)
+        print(result.answer)
+        return 0
+
+    if args.command == "serve":
+        from .webapp import create_app
+
+        app = create_app(db_path=args.db)
+        app.run(host=args.host, port=args.port, debug=args.debug)
         return 0
 
     parser.error("unknown command")

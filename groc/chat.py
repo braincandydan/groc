@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from dataclasses import dataclass, field
 from typing import Optional
 
 from .search import search_items
@@ -53,6 +54,13 @@ def _format_context(rows: list[sqlite3.Row]) -> str:
     return "\n".join(lines)
 
 
+@dataclass
+class AskResult:
+    """An answer plus the raw flyer rows it was grounded in, for source display."""
+    answer: str
+    sources: list = field(default_factory=list)
+
+
 def ask(
     conn: sqlite3.Connection,
     question: str,
@@ -61,7 +69,7 @@ def ask(
     search_limit: int = SEARCH_LIMIT,
     client=None,
     model: str = MODEL,
-) -> str:
+) -> AskResult:
     """Retrieve matching flyer items, then ask Claude to answer grounded in them.
 
     `client` accepts anything with a `.messages.create(...)` method shaped like
@@ -86,4 +94,5 @@ def ask(
             "content": f"Flyer deals:\n{context}\n\nQuestion: {question}",
         }],
     )
-    return next((block.text for block in response.content if block.type == "text"), "")
+    answer = next((block.text for block in response.content if block.type == "text"), "")
+    return AskResult(answer=answer, sources=[dict(row) for row in rows])

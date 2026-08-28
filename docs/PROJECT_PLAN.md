@@ -25,7 +25,7 @@ FLYER_ITEMS  = https://flyers-ng.flippback.com/api/flipp/flyers/{flyer_id}/flyer
 - [ ] Schedule the scraper to run daily (cron job or hosted scheduler) for one or more postal codes — see README for a cron example; actually scheduling it is an infra step for deployment
 
 ## Phase 2 — Backend / retrieval
-- [x] Query the database for matches — `groc/search.py` + `groc search "<query>"` CLI (tokenized keyword match on item_name). Not yet exposed as an HTTP API; that's still open when Phase 4 needs one.
+- [x] Query the database for matches — `groc/search.py` + `groc search "<query>"` CLI (tokenized keyword match on item_name), plus `GET /api/search` in Phase 4's web app
 - [x] Cross-store comparison logic — same query returns matches across every store, ranked cheapest-first (`--best-per-merchant` collapses to one row per store)
 - [ ] Item-matching/normalization (harder problem) — e.g. recognizing "No Name Chicken Breast 1kg" and "PC Chicken Breast Value Pack" refer to comparable products. Start simple (keyword/fuzzy match) and improve later
 - [ ] Unit price normalization so different pack sizes are actually comparable — blocked in practice: real Flipp data never populates `unit_price` (see smoke-test findings), so ranking currently falls back to plain price for effectively all items. Package size is still parsed from item names (`package_size` column) but isn't yet used to normalize price-per-unit across different pack sizes.
@@ -38,13 +38,13 @@ FLYER_ITEMS  = https://flyers-ng.flippback.com/api/flipp/flyers/{flyer_id}/flyer
 - [ ] Not yet tested against the live Claude API — deliberately skipped in the autonomous build loop to avoid spending API credits without explicit sign-off; wiring is unit-tested with a fake client instead. Try `groc ask "..."` yourself once you're ready to spend a live call on it.
 
 ## Phase 4 — Frontend
-- [ ] Simple chat interface (web to start; mobile later if useful)
-- [ ] Postal code / region setting, and optionally preferred store selection
-- [ ] Basic UI to show source items behind an answer (store, price, valid dates)
+- [x] Simple chat interface (web) — `groc/webapp.py` (Flask) + `groc/templates/index.html`, run via `groc serve`. Deliberately unstyled/bare-bones on purpose — no design investment yet, the user wants to do that pass themselves on top of working functionality. Mobile not started.
+- [x] Postal code / region setting — a postal code field on the page, threaded through to both `/api/search` and `/api/ask`. Preferred store selection (the "optionally" part) not implemented.
+- [x] Basic UI to show source items behind an answer — `/api/ask` now returns `sources` (the raw rows `chat.ask()` was grounded in, via the new `AskResult` return type) and the page renders them in a table under the answer.
 
 ## Phase 5 — Hosting/infra
-- [ ] Host for the scheduled scraper + database
-- [ ] Host for the chat backend/frontend
+- [~] Host for the scheduled scraper + database — not deployed anywhere; groundwork only (the existing cron example in the README runs the scraper into a local SQLite file). Needs a real host decision.
+- [~] Host for the chat backend/frontend — `groc/wsgi.py` + `Procfile` + a `prod` extra (`gunicorn`) added so it's deployable, and verified locally that `gunicorn groc.wsgi:app` boots and serves correctly. **Not actually deployed anywhere** — choosing a hosting provider, domain, and deployment pipeline is a real decision (cost, provider preference) that needs the user, not something to pick autonomously.
 
 ## Known open questions / risks
 - Terms-of-service: this hits Flipp's API directly rather than their public site pages; keep scope/personal-use in mind as it grows

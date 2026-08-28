@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>groc</title>
+</head>
+<body>
+<h1>groc</h1>
+
+<p>Postal code: <input id="postal-code" type="text" placeholder="e.g. M5V2H1"></p>
+
+<h2>Search</h2>
+<form id="search-form">
+  <input id="search-query" type="text" placeholder="e.g. chicken breast">
+  <label><input id="search-best-per-merchant" type="checkbox"> cheapest per store only</label>
+  <button type="submit">Search</button>
+</form>
+<table id="search-results" border="1" cellpadding="4">
+  <thead>
+    <tr><th>Store</th><th>Item</th><th>Price</th><th>Valid to</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h2>Ask</h2>
+<form id="ask-form">
+  <input id="ask-question" type="text" placeholder="e.g. what's the best deal on chicken breast" size="60">
+  <button type="submit">Ask</button>
+</form>
+<p id="ask-answer"></p>
+<table id="ask-sources" border="1" cellpadding="4">
+  <thead>
+    <tr><th>Store</th><th>Item</th><th>Price</th><th>Valid to</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+function postalCode() {
+  return document.getElementById('postal-code').value.trim();
+}
+
+function renderRows(tbodyId, rows) {
+  const tbody = document.querySelector('#' + tbodyId + ' tbody');
+  tbody.innerHTML = '';
+  for (const row of rows) {
+    const price = row.unit_price != null ? row.unit_price : row.price;
+    const priceText = price != null ? '$' + Number(price).toFixed(2) : 'n/a';
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td></td><td></td><td></td><td></td>';
+    tr.children[0].textContent = row.merchant;
+    tr.children[1].textContent = row.item_name;
+    tr.children[2].textContent = priceText;
+    tr.children[3].textContent = row.valid_to || '';
+    tbody.appendChild(tr);
+  }
+}
+
+document.getElementById('search-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = document.getElementById('search-query').value.trim();
+  if (!q) return;
+  const params = new URLSearchParams({ q });
+  const pc = postalCode();
+  if (pc) params.set('postal_code', pc);
+  if (document.getElementById('search-best-per-merchant').checked) {
+    params.set('best_per_merchant', '1');
+  }
+  const res = await fetch('/api/search?' + params.toString());
+  const data = await res.json();
+  renderRows('search-results', data.results || []);
+});
+
+document.getElementById('ask-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const question = document.getElementById('ask-question').value.trim();
+  if (!question) return;
+  document.getElementById('ask-answer').textContent = 'Thinking...';
+  const res = await fetch('/api/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question, postal_code: postalCode() || null }),
+  });
+  const data = await res.json();
+  document.getElementById('ask-answer').textContent = data.answer || data.error || '';
+  renderRows('ask-sources', data.sources || []);
+});
+</script>
+</body>
+</html>

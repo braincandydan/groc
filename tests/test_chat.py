@@ -72,7 +72,9 @@ def test_ask_passes_retrieved_context_to_the_model():
 
     result = ask(conn, "what's the best deal on chicken breast", client=client)
 
-    assert result == "Cheapest is No Frills at $4.99."
+    assert result.answer == "Cheapest is No Frills at $4.99."
+    assert len(result.sources) == 1
+    assert result.sources[0]["merchant"] == "No Frills"
     prompt = client.messages.last_kwargs["messages"][0]["content"]
     assert "No Frills" in prompt
     assert "$4.99" in prompt
@@ -126,4 +128,10 @@ def test_ask_returns_empty_string_if_no_text_block_in_response():
     class _NoTextClient:
         messages = _NoTextMessages()
 
-    assert ask(conn, "chicken breast", client=_NoTextClient()) == ""
+    assert ask(conn, "chicken breast", client=_NoTextClient()).answer == ""
+
+
+def test_ask_returns_empty_sources_when_nothing_matches():
+    conn = _conn_with(_row(item_name="Chicken Breast 1kg"))
+    result = ask(conn, "durian", client=_FakeClient())
+    assert result.sources == []

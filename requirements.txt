@@ -1,2 +1,3 @@
 requests>=2.31
 anthropic
+flask>=3.0

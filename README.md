@@ -76,6 +76,32 @@ Requires Claude API credentials to be available (`ANTHROPIC_API_KEY`, or an
 `ant auth login` profile) — see the [Anthropic SDK docs](https://github.com/anthropics/anthropic-sdk-python)
 for auth options.
 
+## Web UI + API
+
+A deliberately bare-bones (unstyled) web UI and JSON API sit on top of the
+same search/chat layers — no design work has gone into this on purpose; it's
+meant to be a functional base for a real design pass later, not a preview of one.
+
+```bash
+python -m groc.cli serve --db groc.db
+```
+
+Then open `http://127.0.0.1:5000/`. Endpoints:
+
+- `GET /api/search?q=<query>&postal_code=<pc>&limit=<n>&best_per_merchant=1` — same ranking as the CLI `search` command
+- `POST /api/ask` with JSON body `{"question": "...", "postal_code": "..."}` — returns `{"answer": "...", "sources": [...]}`, where `sources` are the raw flyer rows the answer was grounded in
+
+For production-style serving (not the Flask dev server), a WSGI entrypoint
+and Procfile are included:
+
+```bash
+pip install -e ".[prod]"
+GROC_DB_PATH=/path/to/groc.db gunicorn groc.wsgi:app
+```
+
+Actually hosting this (choosing a provider, domain, deployment pipeline) is
+still an open decision — see Phase 5 in `docs/PROJECT_PLAN.md`.
+
 ## Scheduling
 
 Run the scraper daily with cron, e.g.:
