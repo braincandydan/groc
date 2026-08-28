@@ -6,7 +6,9 @@ import logging
 import sys
 from typing import Optional, Sequence
 
+from . import db
 from .scraper import DEFAULT_CATEGORIES, run
+from .search import best_by_merchant, search_items
 
 
 def _valid_postal_code(value: str) -> str:
@@ -36,6 +38,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     scrape.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
 
+    search = subparsers.add_parser("search", help="Search scraped flyer items across stores")
+    search.add_argument("query", help="Search terms, e.g. 'chicken breast'")
+    search.add_argument("--db", default="groc.db", help="Path to the SQLite database file")
+    search.add_argument("--postal-code", "-p", type=_valid_postal_code, help="Restrict to one postal code")
+    search.add_argument("--limit", type=int, default=20, help="Max rows to show (default: 20)")
+    search.add_argument(
+        "--best-per-merchant", action="store_true",
+        help="Show only the cheapest matching item per merchant",
+    )
+    search.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+
     return parser
 
 
@@ -54,8 +67,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"Stored/updated {total} flyer item rows in {args.db}")
         return 0
 
+    if args.command == "search":
+        conn = db.connect(args.db)
+        rows = search_items(conn, args.query, postal_code=args.postal_code, limit=args.limit)
+        if args.best_per_merchant:
+            rows = best_by_merchant(rows)
+        _print_results(rows)
+        return 0
+
     parser.error("unknown command")
     return 2
+
+
+def _print_results(rows) -> None:
+    if not rows:
+        print("No matches.")
+        return
+    for row in rows:
+        effective = row["unit_price"] if row["unit_price"] is not None else row["price"]
+        unit = f"/{row['unit_label']}" if row["unit_label"] else ""
+        price_str = f"${effective:.2f}{unit}" if effective is not None else "n/a"
+        deal = f" ({row['deal_quantity']} for ...)" if row["deal_quantity"] else ""
+        print(f"{row['merchant']:<28} {row['item_name']:<45} {price_str}{deal}  (valid to {row['valid_to']})")
 
 
 if __name__ == "__main__":
