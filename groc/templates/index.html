@@ -19,7 +19,7 @@
 <p id="search-status"></p>
 <table id="search-results" border="1" cellpadding="4">
   <thead>
-    <tr><th>Store</th><th>Item</th><th>Price</th><th>Valid to</th></tr>
+    <tr><th>Store</th><th>Item</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
   </thead>
   <tbody></tbody>
 </table>
@@ -32,32 +32,43 @@
 <p id="ask-answer"></p>
 <table id="ask-sources" border="1" cellpadding="4">
   <thead>
-    <tr><th>Store</th><th>Item</th><th>Price</th><th>Valid to</th></tr>
+    <tr><th>Store</th><th>Item</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
   </thead>
   <tbody></tbody>
 </table>
 
 <script>
+console.log('[groc] script loaded');
+
 let allResults = [];
 
 function renderRows(tbodyId, rows) {
+  console.log('[groc] renderRows', tbodyId, rows.length, 'rows');
   const tbody = document.querySelector('#' + tbodyId + ' tbody');
   tbody.innerHTML = '';
   for (const row of rows) {
     const price = row.unit_price != null ? row.unit_price : row.price;
     const priceText = price != null ? '$' + Number(price).toFixed(2) : 'n/a';
+    const wasText = row.was_price != null ? '$' + Number(row.was_price).toFixed(2) : '';
+    let savedText = '';
+    if (row.was_price != null && price != null && row.was_price > price) {
+      savedText = '$' + (row.was_price - price).toFixed(2);
+    }
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td></td><td></td><td></td><td></td>';
+    tr.innerHTML = '<td></td><td></td><td></td><td></td><td></td><td></td>';
     tr.children[0].textContent = row.merchant;
     tr.children[1].textContent = row.item_name;
-    tr.children[2].textContent = priceText;
-    tr.children[3].textContent = row.valid_to || '';
+    tr.children[2].textContent = wasText;
+    tr.children[3].textContent = priceText;
+    tr.children[4].textContent = savedText;
+    tr.children[5].textContent = row.valid_to || '';
     tbody.appendChild(tr);
   }
 }
 
 function applyFilterAndRender() {
   const terms = document.getElementById('filter-query').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  console.log('[groc] applyFilterAndRender terms=', terms, 'allResults.length=', allResults.length);
   let rows = allResults;
   if (terms.length) {
     rows = rows.filter(row => terms.every(t => row.item_name.toLowerCase().includes(t)));
@@ -70,26 +81,53 @@ function applyFilterAndRender() {
       return true;
     });
   }
+  console.log('[groc] filtered down to', rows.length, 'rows');
   renderRows('search-results', rows);
 }
 
-document.getElementById('load-form').addEventListener('submit', async (e) => {
+const loadForm = document.getElementById('load-form');
+console.log('[groc] load-form element:', loadForm);
+
+loadForm.addEventListener('submit', async (e) => {
   e.preventDefault();
+  console.log('[groc] load-form submit fired');
   const postalCode = document.getElementById('postal-code').value.trim();
-  if (!postalCode) return;
+  console.log('[groc] postalCode =', JSON.stringify(postalCode));
+  if (!postalCode) {
+    console.log('[groc] no postal code entered, aborting');
+    return;
+  }
 
   const statusEl = document.getElementById('search-status');
   statusEl.textContent = 'Loading...';
 
   const params = new URLSearchParams({ postal_code: postalCode, limit: 500 });
-  const res = await fetch('/api/search?' + params.toString());
-  const data = await res.json();
-  allResults = data.results || [];
+  const url = '/api/search?' + params.toString();
+  console.log('[groc] fetching', url);
 
-  document.getElementById('filter-query').disabled = false;
-  document.getElementById('best-per-merchant').disabled = false;
-  statusEl.textContent = allResults.length + ' items loaded for ' + postalCode + '. Type below to filter.';
-  applyFilterAndRender();
+  try {
+    const res = await fetch(url);
+    console.log('[groc] response status', res.status);
+    const data = await res.json();
+    console.log('[groc] response json', data);
+
+    if (!res.ok) {
+      statusEl.textContent = 'Error: ' + (data.error || res.status);
+      console.error('[groc] search request failed', data);
+      return;
+    }
+
+    allResults = data.results || [];
+    console.log('[groc] allResults set, length =', allResults.length);
+
+    document.getElementById('filter-query').disabled = false;
+    document.getElementById('best-per-merchant').disabled = false;
+    statusEl.textContent = allResults.length + ' items loaded for ' + postalCode + '. Type below to filter.';
+    applyFilterAndRender();
+  } catch (err) {
+    console.error('[groc] fetch threw', err);
+    statusEl.textContent = 'Error: ' + err;
+  }
 });
 
 document.getElementById('filter-query').addEventListener('input', applyFilterAndRender);
@@ -97,20 +135,28 @@ document.getElementById('best-per-merchant').addEventListener('change', applyFil
 
 document.getElementById('ask-form').addEventListener('submit', async (e) => {
   e.preventDefault();
+  console.log('[groc] ask-form submit fired');
   const question = document.getElementById('ask-question').value.trim();
   if (!question) return;
   document.getElementById('ask-answer').textContent = 'Thinking...';
-  const res = await fetch('/api/ask', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      question,
-      postal_code: document.getElementById('postal-code').value.trim() || null,
-    }),
-  });
-  const data = await res.json();
-  document.getElementById('ask-answer').textContent = data.answer || data.error || '';
-  renderRows('ask-sources', data.sources || []);
+  try {
+    const res = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        postal_code: document.getElementById('postal-code').value.trim() || null,
+      }),
+    });
+    console.log('[groc] ask response status', res.status);
+    const data = await res.json();
+    console.log('[groc] ask response json', data);
+    document.getElementById('ask-answer').textContent = data.answer || data.error || '';
+    renderRows('ask-sources', data.sources || []);
+  } catch (err) {
+    console.error('[groc] ask fetch threw', err);
+    document.getElementById('ask-answer').textContent = 'Error: ' + err;
+  }
 });
 </script>
 </body>
