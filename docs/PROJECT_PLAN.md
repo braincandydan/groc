@@ -25,10 +25,10 @@ FLYER_ITEMS  = https://flyers-ng.flippback.com/api/flipp/flyers/{flyer_id}/flyer
 - [ ] Schedule the scraper to run daily (cron job or hosted scheduler) for one or more postal codes — see README for a cron example; actually scheduling it is an infra step for deployment
 
 ## Phase 2 — Backend / retrieval
-- [ ] API endpoint(s) that take a user query (e.g. "chicken breast") and search the database for matches
-- [ ] Cross-store comparison logic — same query, return matches from every store, sorted by price/unit price
+- [x] Query the database for matches — `groc/search.py` + `groc search "<query>"` CLI (tokenized keyword match on item_name). Not yet exposed as an HTTP API; that's still open when Phase 4 needs one.
+- [x] Cross-store comparison logic — same query returns matches across every store, ranked cheapest-first (`--best-per-merchant` collapses to one row per store)
 - [ ] Item-matching/normalization (harder problem) — e.g. recognizing "No Name Chicken Breast 1kg" and "PC Chicken Breast Value Pack" refer to comparable products. Start simple (keyword/fuzzy match) and improve later
-- [ ] Unit price normalization so different pack sizes are actually comparable
+- [ ] Unit price normalization so different pack sizes are actually comparable — blocked in practice: real Flipp data never populates `unit_price` (see smoke-test findings), so ranking currently falls back to plain price for effectively all items. Package size is still parsed from item names (`package_size` column) but isn't yet used to normalize price-per-unit across different pack sizes.
 
 ## Phase 3 — Chat layer
 - [ ] Connect to an LLM via API
