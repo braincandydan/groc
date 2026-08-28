@@ -43,6 +43,8 @@ FLYER_ITEMS  = https://flyers-ng.flippback.com/api/flipp/flyers/{flyer_id}/flyer
 - [x] Simple chat interface (web) — `groc/webapp.py` (Flask) + `groc/templates/index.html`, run via `groc serve`. Deliberately unstyled/bare-bones on purpose — no design investment yet, the user wants to do that pass themselves on top of working functionality. Mobile not started.
 - [x] Postal code / region setting — a postal code field on the page, threaded through to both `/api/search` and `/api/ask`. Preferred store selection (the "optionally" part) not implemented.
 - [x] Basic UI to show source items behind an answer — `/api/ask` now returns `sources` (the raw rows `chat.ask()` was grounded in, via the new `AskResult` return type) and the page renders them in a table under the answer.
+- [x] Postal code loads the full item list once, then a second field filters it client-side as you type (no per-keystroke server round-trip) — reworked from the original per-query-only search after trying it live.
+- [x] Two new DB columns added on request: `cutout_image_url` (the item's cropped flyer-page image — the only place markdown/multi-buy pricing is actually visible) and `category` (the flyer's own category tag). Both shown in the results table. `init_db()` migrates existing DB files in place.
 
 ## Phase 5 — Hosting/infra
 - [~] Host for the scheduled scraper + database — not deployed anywhere; groundwork only (the existing cron example in the README runs the scraper into a local SQLite file). Needs a real host decision.

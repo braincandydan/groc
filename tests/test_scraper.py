@@ -51,3 +51,39 @@ def test_scrape_postal_code_all_categories():
     total = scrape_postal_code(client, conn, "M5V2H1", categories=None)
 
     assert total == 1
+
+
+def test_scrape_postal_code_captures_cutout_image_url_and_category():
+    flyers = [{"id": 1, "merchant": "No Frills", "categories": ["Groceries", "Pharmacy"]}]
+    items_by_flyer = {
+        1: [{
+            "name": "Milk 2L",
+            "price": "$3.99",
+            "valid_from": "2026-08-01",
+            "valid_to": "2026-08-07",
+            "cutout_image_url": "https://f.wishabi.net/page_items/123/456/extra_large.jpg",
+        }],
+    }
+    client = FakeFlippClient(flyers, items_by_flyer)
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    scrape_postal_code(client, conn, "M5V2H1")
+
+    row = conn.execute("SELECT * FROM flyer_items").fetchone()
+    assert row["cutout_image_url"] == "https://f.wishabi.net/page_items/123/456/extra_large.jpg"
+    assert row["category"] == "Groceries,Pharmacy"
+
+
+def test_scrape_postal_code_missing_cutout_image_url_stores_null():
+    flyers = [{"id": 1, "merchant": "No Frills", "categories": ["Groceries"]}]
+    items_by_flyer = {1: [{"name": "Milk 2L", "price": "$3.99"}]}
+    client = FakeFlippClient(flyers, items_by_flyer)
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    scrape_postal_code(client, conn, "M5V2H1")
+
+    row = conn.execute("SELECT * FROM flyer_items").fetchone()
+    assert row["cutout_image_url"] is None
+    assert row["category"] == "Groceries"

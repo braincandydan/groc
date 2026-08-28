@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS flyer_items (
     valid_to TEXT,
     postal_code TEXT NOT NULL,
     scraped_at TEXT NOT NULL,
+    cutout_image_url TEXT,
+    category TEXT,
     UNIQUE(flyer_id, item_name, raw_price_text, postal_code, valid_from)
 );
 CREATE INDEX IF NOT EXISTS idx_flyer_items_item_name ON flyer_items(item_name);
@@ -38,15 +40,25 @@ CREATE INDEX IF NOT EXISTS idx_flyer_items_merchant ON flyer_items(merchant);
 CREATE INDEX IF NOT EXISTS idx_flyer_items_postal_code ON flyer_items(postal_code);
 """
 
+# Columns added after the initial release. init_db() ALTER TABLEs these into
+# any pre-existing database that predates them, so older DB files upgrade in
+# place instead of needing a manual migration.
+_ADDED_COLUMNS = [
+    ("cutout_image_url", "TEXT"),
+    ("category", "TEXT"),
+]
+
 _UPSERT_SQL = """
 INSERT INTO flyer_items (
     merchant, flyer_id, item_name, raw_price_text, price, was_price,
     unit_price, unit_label, deal_quantity, package_size,
-    valid_from, valid_to, postal_code, scraped_at
+    valid_from, valid_to, postal_code, scraped_at,
+    cutout_image_url, category
 ) VALUES (
     :merchant, :flyer_id, :item_name, :raw_price_text, :price, :was_price,
     :unit_price, :unit_label, :deal_quantity, :package_size,
-    :valid_from, :valid_to, :postal_code, :scraped_at
+    :valid_from, :valid_to, :postal_code, :scraped_at,
+    :cutout_image_url, :category
 )
 ON CONFLICT(flyer_id, item_name, raw_price_text, postal_code, valid_from)
 DO UPDATE SET
@@ -57,7 +69,9 @@ DO UPDATE SET
     deal_quantity = excluded.deal_quantity,
     package_size = excluded.package_size,
     valid_to = excluded.valid_to,
-    scraped_at = excluded.scraped_at;
+    scraped_at = excluded.scraped_at,
+    cutout_image_url = excluded.cutout_image_url,
+    category = excluded.category;
 """
 
 
@@ -69,6 +83,12 @@ def connect(db_path: Union[str, Path]) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    for column, coltype in _ADDED_COLUMNS:
+        try:
+            conn.execute(f"ALTER TABLE flyer_items ADD COLUMN {column} {coltype}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" not in str(e):
+                raise
     conn.commit()
 
 

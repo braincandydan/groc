@@ -128,6 +128,10 @@ Run the scraper daily with cron, e.g.:
 | `valid_from` / `valid_to` | flyer validity dates |
 | `postal_code` | |
 | `scraped_at` | UTC ISO timestamp of the last time this row was seen |
+| `cutout_image_url` | Flipp's cropped image of just this item's tag on the flyer page — the only place markdown/multi-buy pricing is actually visible (see Known limitations) |
+| `category` | comma-joined categories of the flyer this item came from (e.g. `"Groceries"`, or `"All Flyers,Groceries"`) — a flyer-level tag, not per-item |
+
+`cutout_image_url`/`category` were added after the initial schema; `init_db()` `ALTER TABLE`s them into any pre-existing database file automatically, so an older `groc.db` upgrades in place the next time it's scraped.
 
 ## Running tests
 

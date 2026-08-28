@@ -20,6 +20,8 @@ def _row(**overrides):
         "valid_to": "2026-08-07",
         "postal_code": "M5V2H1",
         "scraped_at": "2026-08-01T00:00:00+00:00",
+        "cutout_image_url": None,
+        "category": "Groceries",
     }
     base.update(overrides)
     return base

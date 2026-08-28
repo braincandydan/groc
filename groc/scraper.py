@@ -39,7 +39,9 @@ def _price_source_text(item: dict) -> str:
     return ""
 
 
-def _build_row(item: dict, merchant: str, flyer_id: int, postal_code: str, scraped_at: str) -> dict:
+def _build_row(
+    item: dict, merchant: str, flyer_id: int, postal_code: str, scraped_at: str, category: str = "",
+) -> dict:
     name = item.get("name") or item.get("item_name") or ""
     parsed = parse_price(_price_source_text(item), item_name=name)
     return {
@@ -57,6 +59,8 @@ def _build_row(item: dict, merchant: str, flyer_id: int, postal_code: str, scrap
         "valid_to": item.get("valid_to"),
         "postal_code": postal_code,
         "scraped_at": scraped_at,
+        "cutout_image_url": item.get("cutout_image_url"),
+        "category": category,
     }
 
 
@@ -86,8 +90,9 @@ def scrape_postal_code(
             logger.exception("failed to fetch items for flyer_id=%s merchant=%s", flyer_id, merchant)
             continue
 
+        category = ",".join(sorted(_flyer_categories(flyer)))
         scraped_at = db.utcnow_iso()
-        rows = [_build_row(item, merchant, flyer_id, postal_code, scraped_at) for item in items]
+        rows = [_build_row(item, merchant, flyer_id, postal_code, scraped_at, category=category) for item in items]
         total_rows += db.upsert_items(conn, rows)
         logger.info("merchant=%s flyer_id=%s stored %d items", merchant, flyer_id, len(rows))
 

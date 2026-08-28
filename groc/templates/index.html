@@ -19,7 +19,7 @@
 <p id="search-status"></p>
 <table id="search-results" border="1" cellpadding="4">
   <thead>
-    <tr><th>Store</th><th>Item</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
+    <tr><th>Store</th><th>Image</th><th>Item</th><th>Category</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
   </thead>
   <tbody></tbody>
 </table>
@@ -32,7 +32,7 @@
 <p id="ask-answer"></p>
 <table id="ask-sources" border="1" cellpadding="4">
   <thead>
-    <tr><th>Store</th><th>Item</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
+    <tr><th>Store</th><th>Image</th><th>Item</th><th>Category</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
   </thead>
   <tbody></tbody>
 </table>
@@ -54,14 +54,25 @@ function renderRows(tbodyId, rows) {
     if (row.was_price != null && price != null && row.was_price > price) {
       savedText = '$' + (row.was_price - price).toFixed(2);
     }
+
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td></td><td></td><td></td><td></td><td></td><td></td>';
+    tr.innerHTML = '<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>';
     tr.children[0].textContent = row.merchant;
-    tr.children[1].textContent = row.item_name;
-    tr.children[2].textContent = wasText;
-    tr.children[3].textContent = priceText;
-    tr.children[4].textContent = savedText;
-    tr.children[5].textContent = row.valid_to || '';
+
+    if (row.cutout_image_url) {
+      const img = document.createElement('img');
+      img.src = row.cutout_image_url;
+      img.alt = row.item_name;
+      img.style.height = '50px';
+      tr.children[1].appendChild(img);
+    }
+
+    tr.children[2].textContent = row.item_name;
+    tr.children[3].textContent = row.category || '';
+    tr.children[4].textContent = wasText;
+    tr.children[5].textContent = priceText;
+    tr.children[6].textContent = savedText;
+    tr.children[7].textContent = row.valid_to || '';
     tbody.appendChild(tr);
   }
 }
