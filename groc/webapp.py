@@ -19,6 +19,14 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     return dict(row)
 
 
+def _normalize_postal_code(value: Optional[str]) -> Optional[str]:
+    """Uppercase/strip so 'v1y7m4' matches stored 'V1Y7M4' rows instead of silently finding nothing."""
+    if not value:
+        return None
+    cleaned = value.strip().upper().replace(" ", "")
+    return cleaned or None
+
+
 def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
     """Build the Flask app. `chat_client` is injectable so tests can avoid the network."""
     app = Flask(__name__)
@@ -34,11 +42,11 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
 
     @app.get("/api/search")
     def api_search():
+        # Blank/missing 'q' means "list everything for this postal code" —
+        # the frontend uses this for an initial full load, then filters
+        # client-side rather than re-querying per keystroke.
         query = request.args.get("q", "").strip()
-        if not query:
-            return jsonify({"error": "missing required query param 'q'"}), 400
-
-        postal_code = request.args.get("postal_code") or None
+        postal_code = _normalize_postal_code(request.args.get("postal_code"))
         best_per_merchant = request.args.get("best_per_merchant") in ("1", "true", "yes")
         try:
             limit = int(request.args.get("limit", 20))
@@ -58,7 +66,7 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         if not question:
             return jsonify({"error": "missing required field 'question'"}), 400
 
-        postal_code = payload.get("postal_code") or None
+        postal_code = _normalize_postal_code(payload.get("postal_code"))
         conn = _connect()
         result = chat_ask(conn, question, postal_code=postal_code, client=app.config["CHAT_CLIENT"])
         return jsonify({"answer": result.answer, "sources": result.sources})

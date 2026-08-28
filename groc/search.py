@@ -17,11 +17,13 @@ def search_items(
     postal_code: Optional[str] = None,
     limit: int = 50,
 ) -> list[sqlite3.Row]:
-    """Return matching flyer_items rows, cheapest-effective-price first."""
-    tokens = query.strip().split()
-    if not tokens:
-        return []
+    """Return matching flyer_items rows, cheapest-effective-price first.
 
+    An empty/blank query means "no item-name filter" — e.g. just list every
+    item for a postal code, so a client can fetch everything once and filter
+    it further client-side.
+    """
+    tokens = query.strip().split()
     where = ["item_name LIKE ? ESCAPE '\\'"] * len(tokens)
     params: list = [_like_pattern(t) for t in tokens]
 
@@ -29,9 +31,10 @@ def search_items(
         where.append("postal_code = ?")
         params.append(postal_code)
 
+    where_sql = f"WHERE {' AND '.join(where)}" if where else ""
     sql = f"""
         SELECT * FROM flyer_items
-        WHERE {' AND '.join(where)}
+        {where_sql}
         ORDER BY
             CASE WHEN COALESCE(unit_price, price) IS NULL THEN 1 ELSE 0 END,
             CASE WHEN unit_price IS NOT NULL THEN unit_price ELSE price END ASC,

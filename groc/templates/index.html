@@ -7,14 +7,16 @@
 <body>
 <h1>groc</h1>
 
-<p>Postal code: <input id="postal-code" type="text" placeholder="e.g. M5V2H1"></p>
-
 <h2>Search</h2>
-<form id="search-form">
-  <input id="search-query" type="text" placeholder="e.g. chicken breast">
-  <label><input id="search-best-per-merchant" type="checkbox"> cheapest per store only</label>
+<form id="load-form">
+  <label>Postal code: <input id="postal-code" type="text" placeholder="e.g. M5V2H1"></label>
   <button type="submit">Search</button>
 </form>
+<p>
+  <input id="filter-query" type="text" placeholder="filter results, e.g. chicken breast" disabled>
+  <label><input id="best-per-merchant" type="checkbox" disabled> cheapest per store only</label>
+</p>
+<p id="search-status"></p>
 <table id="search-results" border="1" cellpadding="4">
   <thead>
     <tr><th>Store</th><th>Item</th><th>Price</th><th>Valid to</th></tr>
@@ -36,9 +38,7 @@
 </table>
 
 <script>
-function postalCode() {
-  return document.getElementById('postal-code').value.trim();
-}
+let allResults = [];
 
 function renderRows(tbodyId, rows) {
   const tbody = document.querySelector('#' + tbodyId + ' tbody');
@@ -56,20 +56,44 @@ function renderRows(tbodyId, rows) {
   }
 }
 
-document.getElementById('search-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const q = document.getElementById('search-query').value.trim();
-  if (!q) return;
-  const params = new URLSearchParams({ q });
-  const pc = postalCode();
-  if (pc) params.set('postal_code', pc);
-  if (document.getElementById('search-best-per-merchant').checked) {
-    params.set('best_per_merchant', '1');
+function applyFilterAndRender() {
+  const terms = document.getElementById('filter-query').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let rows = allResults;
+  if (terms.length) {
+    rows = rows.filter(row => terms.every(t => row.item_name.toLowerCase().includes(t)));
   }
+  if (document.getElementById('best-per-merchant').checked) {
+    const seen = new Set();
+    rows = rows.filter(row => {
+      if (seen.has(row.merchant)) return false;
+      seen.add(row.merchant);
+      return true;
+    });
+  }
+  renderRows('search-results', rows);
+}
+
+document.getElementById('load-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const postalCode = document.getElementById('postal-code').value.trim();
+  if (!postalCode) return;
+
+  const statusEl = document.getElementById('search-status');
+  statusEl.textContent = 'Loading...';
+
+  const params = new URLSearchParams({ postal_code: postalCode, limit: 500 });
   const res = await fetch('/api/search?' + params.toString());
   const data = await res.json();
-  renderRows('search-results', data.results || []);
+  allResults = data.results || [];
+
+  document.getElementById('filter-query').disabled = false;
+  document.getElementById('best-per-merchant').disabled = false;
+  statusEl.textContent = allResults.length + ' items loaded for ' + postalCode + '. Type below to filter.';
+  applyFilterAndRender();
 });
+
+document.getElementById('filter-query').addEventListener('input', applyFilterAndRender);
+document.getElementById('best-per-merchant').addEventListener('change', applyFilterAndRender);
 
 document.getElementById('ask-form').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -79,7 +103,10 @@ document.getElementById('ask-form').addEventListener('submit', async (e) => {
   const res = await fetch('/api/ask', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, postal_code: postalCode() || null }),
+    body: JSON.stringify({
+      question,
+      postal_code: document.getElementById('postal-code').value.trim() || null,
+    }),
   });
   const data = await res.json();
   document.getElementById('ask-answer').textContent = data.answer || data.error || '';

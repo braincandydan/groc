@@ -116,6 +116,16 @@ def test_search_no_matches_returns_empty_list():
     assert search_items(conn, "durian") == []
 
 
+def test_search_empty_query_lists_everything_for_postal_code():
+    conn = _conn_with(
+        _row(flyer_id=1, postal_code="M5V2H1", item_name="Chicken Breast"),
+        _row(flyer_id=2, postal_code="M5V2H1", item_name="Bananas", price=0.79),
+        _row(flyer_id=3, postal_code="V1Y7M4", item_name="Apples", price=0.99),
+    )
+    rows = search_items(conn, "", postal_code="M5V2H1")
+    assert {r["item_name"] for r in rows} == {"Chicken Breast", "Bananas"}
+
+
 def test_top_deals_orders_cheapest_first_across_all_items():
     conn = _conn_with(
         _row(flyer_id=1, merchant="Metro", item_name="Steak", price=19.99),
