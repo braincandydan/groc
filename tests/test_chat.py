@@ -135,3 +135,32 @@ def test_ask_returns_empty_sources_when_nothing_matches():
     conn = _conn_with(_row(item_name="Chicken Breast 1kg"))
     result = ask(conn, "durian", client=_FakeClient())
     assert result.sources == []
+
+
+def test_ask_falls_back_to_top_deals_when_no_product_named():
+    conn = _conn_with(
+        _row(flyer_id=1, merchant="Metro", item_name="Steak", price=19.99),
+        _row(flyer_id=2, merchant="No Frills", item_name="Bananas", price=0.79),
+    )
+    client = _FakeClient()
+
+    result = ask(conn, "what should I buy this week to save money?", client=client)
+
+    prompt = client.messages.last_kwargs["messages"][0]["content"]
+    assert "Bananas" in prompt
+    assert "Steak" in prompt
+    assert [s["item_name"] for s in result.sources] == ["Bananas", "Steak"]
+
+
+def test_ask_uses_item_search_when_product_is_named_even_with_filler_words():
+    conn = _conn_with(
+        _row(flyer_id=1, merchant="Metro", item_name="Steak", price=19.99),
+        _row(flyer_id=2, merchant="No Frills", item_name="Chicken Breast", price=4.99),
+    )
+    client = _FakeClient()
+
+    ask(conn, "suggest the best deal on chicken breast to save money", client=client)
+
+    prompt = client.messages.last_kwargs["messages"][0]["content"]
+    assert "Chicken Breast" in prompt
+    assert "Steak" not in prompt

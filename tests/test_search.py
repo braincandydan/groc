@@ -1,5 +1,5 @@
 from groc import db
-from groc.search import best_by_merchant, search_items
+from groc.search import best_by_merchant, search_items, top_deals
 
 
 def _row(**overrides):
@@ -114,3 +114,51 @@ def test_search_places_null_price_rows_last():
 def test_search_no_matches_returns_empty_list():
     conn = _conn_with(_row(item_name="Chicken Breast"))
     assert search_items(conn, "durian") == []
+
+
+def test_top_deals_orders_cheapest_first_across_all_items():
+    conn = _conn_with(
+        _row(flyer_id=1, merchant="Metro", item_name="Steak", price=19.99),
+        _row(flyer_id=2, merchant="No Frills", item_name="Bananas", price=0.79),
+        _row(flyer_id=3, merchant="FreshCo", item_name="Bread", price=2.99),
+    )
+    rows = top_deals(conn)
+    assert [r["item_name"] for r in rows] == ["Bananas", "Bread", "Steak"]
+
+
+def test_top_deals_excludes_null_price_rows():
+    conn = _conn_with(
+        _row(flyer_id=1, merchant="Healthy Planet", item_name="Entire Line", price=None, raw_price_text=""),
+        _row(flyer_id=2, merchant="No Frills", item_name="Bananas", price=0.79),
+    )
+    rows = top_deals(conn)
+    assert [r["item_name"] for r in rows] == ["Bananas"]
+
+
+def test_top_deals_excludes_zero_and_negative_price_rows():
+    # e.g. Walmart's $0 subsidized-phone rows leaking in via a "Groceries"-
+    # tagged flyer that also covers other departments (Flipp categorizes
+    # whole flyers, not individual items).
+    conn = _conn_with(
+        _row(flyer_id=1, merchant="Walmart", item_name="Subsidized Phone", price=0.0, raw_price_text="0.0"),
+        _row(flyer_id=2, merchant="No Frills", item_name="Bananas", price=0.79),
+    )
+    rows = top_deals(conn)
+    assert [r["item_name"] for r in rows] == ["Bananas"]
+
+
+def test_top_deals_respects_postal_code_filter():
+    conn = _conn_with(
+        _row(flyer_id=1, postal_code="M5V2H1", item_name="Bananas", price=0.79),
+        _row(flyer_id=2, postal_code="V1Y7M4", item_name="Apples", price=0.99),
+    )
+    rows = top_deals(conn, postal_code="V1Y7M4")
+    assert [r["item_name"] for r in rows] == ["Apples"]
+
+
+def test_top_deals_respects_limit():
+    rows = [_row(flyer_id=i, item_name=f"Item {i}", price=float(i)) for i in range(1, 6)]
+    conn = _conn_with(*rows)
+    result = top_deals(conn, limit=2)
+    assert len(result) == 2
+    assert [r["item_name"] for r in result] == ["Item 1", "Item 2"]

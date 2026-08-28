@@ -42,6 +42,40 @@ def search_items(
     return conn.execute(sql, params).fetchall()
 
 
+def top_deals(
+    conn: sqlite3.Connection,
+    postal_code: Optional[str] = None,
+    limit: int = 30,
+) -> list[sqlite3.Row]:
+    """Return the overall cheapest priced items, no item-name filter.
+
+    For questions that don't name a specific product (e.g. "what should I buy
+    this week to save money") — there's nothing to keyword-match against, so
+    this gives a grounded set of genuinely cheap items to reason about instead.
+
+    Excludes price <= 0: Flipp categorizes flyers as a whole rather than
+    per-item, so a big-box store's single "Groceries"-tagged flyer can still
+    contain its electronics section — `$0` subsidized-phone rows were showing
+    up as the "cheapest" items otherwise.
+    """
+    where = ["price IS NOT NULL", "price > 0"]
+    params: list = []
+
+    if postal_code:
+        where.append("postal_code = ?")
+        params.append(postal_code)
+
+    sql = f"""
+        SELECT * FROM flyer_items
+        WHERE {' AND '.join(where)}
+        ORDER BY
+            CASE WHEN unit_price IS NOT NULL THEN unit_price ELSE price END ASC
+        LIMIT ?
+    """
+    params.append(limit)
+    return conn.execute(sql, params).fetchall()
+
+
 def best_by_merchant(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
     """Collapse to one (the cheapest) row per merchant, preserving input order."""
     seen = set()

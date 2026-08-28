@@ -11,27 +11,37 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .search import search_items
+from .search import search_items, top_deals
 
 MODEL = "claude-opus-5"
 SEARCH_LIMIT = 15
 
 # Small hand-picked stopword list — good enough to turn a natural-language
 # question into item-name search terms without pulling in an NLP dependency.
+# Includes generic meal-planning/budget filler words (e.g. "save", "meal",
+# "sale") on purpose: when everything left over is one of these, ask() takes
+# that as a sign no specific product was named and falls back to top_deals()
+# instead of keyword-searching item names for nonsense like "save money".
 _STOPWORDS = {
     "a", "an", "the", "is", "are", "was", "were", "what", "whats", "what's",
     "where", "which", "who", "when", "how", "best", "good", "cheap", "cheapest",
     "cheaper", "deal", "deals", "on", "for", "to", "of", "in", "at", "buy",
     "should", "i", "me", "my", "can", "you", "please", "find", "get", "some",
-    "any", "this", "that", "week", "store", "stores", "and", "or", "with",
+    "any", "this", "that", "that's", "week", "store", "stores", "and", "or",
+    "with", "save", "money", "budget", "suggest", "recommend", "meal", "meals",
+    "using", "stuff", "sale", "sales", "shopping", "list", "recipe", "recipes",
+    "cook", "dinner", "something", "things", "thing", "ideas", "idea",
 }
+
+
+def _keyword_tokens(question: str) -> list[str]:
+    words = re.findall(r"[a-zA-Z0-9']+", question.lower())
+    return [w for w in words if w not in _STOPWORDS]
 
 
 def extract_keywords(question: str) -> str:
     """Strip punctuation/stopwords from a question, keeping the rest as search terms."""
-    words = re.findall(r"[a-zA-Z0-9']+", question.lower())
-    keywords = [w for w in words if w not in _STOPWORDS]
-    return " ".join(keywords) or question
+    return " ".join(_keyword_tokens(question)) or question
 
 
 SYSTEM_PROMPT = (
@@ -81,8 +91,13 @@ def ask(
 
         client = anthropic.Anthropic()
 
-    keywords = extract_keywords(question)
-    rows = search_items(conn, keywords, postal_code=postal_code, limit=search_limit)
+    tokens = _keyword_tokens(question)
+    if tokens:
+        rows = search_items(conn, " ".join(tokens), postal_code=postal_code, limit=search_limit)
+    else:
+        # No specific product named (e.g. "what should I buy to save money") —
+        # nothing sensible to keyword-match, so ground on the cheapest items instead.
+        rows = top_deals(conn, postal_code=postal_code, limit=search_limit)
     context = _format_context(rows)
 
     response = client.messages.create(
