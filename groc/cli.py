@@ -7,6 +7,7 @@ import sys
 from typing import Optional, Sequence
 
 from . import db
+from .chat import ask as chat_ask
 from .scraper import DEFAULT_CATEGORIES, run
 from .search import best_by_merchant, search_items
 
@@ -49,6 +50,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     search.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
 
+    ask = subparsers.add_parser("ask", help="Ask a grocery-deal question, answered by Claude grounded in scraped data")
+    ask.add_argument("question", help="Question to ask, e.g. 'what's the best deal on chicken breast'")
+    ask.add_argument("--db", default="groc.db", help="Path to the SQLite database file")
+    ask.add_argument("--postal-code", "-p", type=_valid_postal_code, help="Restrict to one postal code")
+    ask.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+
     return parser
 
 
@@ -73,6 +80,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.best_per_merchant:
             rows = best_by_merchant(rows)
         _print_results(rows)
+        return 0
+
+    if args.command == "ask":
+        conn = db.connect(args.db)
+        print(chat_ask(conn, args.question, postal_code=args.postal_code))
         return 0
 
     parser.error("unknown command")

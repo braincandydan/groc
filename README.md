@@ -42,6 +42,40 @@ Each run upserts rows keyed on
 re-running against the same flyer just refreshes `scraped_at` instead of
 duplicating rows — data accumulates across runs instead of being overwritten.
 
+## Searching
+
+Search scraped items across every store, cheapest first:
+
+```bash
+python -m groc.cli search "chicken breast" --db groc.db
+```
+
+Restrict to one postal code, or collapse to the cheapest match per store:
+
+```bash
+python -m groc.cli search "chicken breast" --db groc.db -p M5V2H1 --best-per-merchant
+```
+
+Ranking prefers `unit_price` when a row has one (so differently-sized packages
+stay comparable), falling back to plain `price` otherwise — in practice this
+means plain price almost always, since real Flipp data rarely populates
+`unit_price` (see Known limitations below).
+
+## Asking questions (chat layer)
+
+`ask` retrieves matching items from the database first, then passes those
+results plus your question to Claude to generate a grounded conversational
+answer — the model is instructed to answer only from the retrieved rows, not
+to invent prices:
+
+```bash
+python -m groc.cli ask "what's the best deal on chicken breast" --db groc.db
+```
+
+Requires Claude API credentials to be available (`ANTHROPIC_API_KEY`, or an
+`ant auth login` profile) — see the [Anthropic SDK docs](https://github.com/anthropics/anthropic-sdk-python)
+for auth options.
+
 ## Scheduling
 
 Run the scraper daily with cron, e.g.:
@@ -74,3 +108,13 @@ Run the scraper daily with cron, e.g.:
 ```bash
 pytest
 ```
+
+## Known limitations
+
+- Real Flipp API data almost never populates `was_price`, `unit_price`, or
+  `deal_quantity` — items only ever carry a plain current `price` (see
+  `docs/PROJECT_PLAN.md` Phase 2 notes). Markdown/multi-buy detection in
+  `price_parser.py` is exercised by unit tests but not by live data.
+- Search/ask matching is literal keyword matching on `item_name` — no
+  brand-variant normalization yet (e.g. "No Name" vs "PC" chicken breast
+  aren't recognized as comparable products).

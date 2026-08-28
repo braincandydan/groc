@@ -5,6 +5,7 @@ description = "Grocery deal scraper and chat assistant built on Flipp's flyer AP
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.31",
+    "anthropic",
 ]
 
 [project.optional-dependencies]

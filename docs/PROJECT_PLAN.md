@@ -31,10 +31,11 @@ FLYER_ITEMS  = https://flyers-ng.flippback.com/api/flipp/flyers/{flyer_id}/flyer
 - [ ] Unit price normalization so different pack sizes are actually comparable — blocked in practice: real Flipp data never populates `unit_price` (see smoke-test findings), so ranking currently falls back to plain price for effectively all items. Package size is still parsed from item names (`package_size` column) but isn't yet used to normalize price-per-unit across different pack sizes.
 
 ## Phase 3 — Chat layer
-- [ ] Connect to an LLM via API
-- [ ] On each user question: retrieve matching items from the database first, then pass those results + the question to the model to generate a conversational answer
-- [ ] Prompt design to keep answers grounded in actual retrieved data, not guessed prices
-- [ ] Support conversational asks like: "what's the best deal on X," "what should I buy this week to save money," "suggest a meal using stuff that's on sale"
+- [x] Connect to an LLM via API — `groc/chat.py` uses the Claude API (`claude-opus-5`), `groc ask "<question>"` CLI
+- [x] On each user question: retrieve matching items from the database first (via Phase 2's `search_items`), then pass those results + the question to the model to generate a conversational answer
+- [x] Prompt design to keep answers grounded in actual retrieved data, not guessed prices — system prompt instructs the model to answer only from the retrieved list and say so plainly when nothing matches
+- [ ] Support richer conversational asks like "what should I buy this week to save money" or "suggest a meal using stuff that's on sale" — current keyword extraction is a simple stopword strip, tuned for direct item lookups ("best deal on X"); broader/aggregate questions aren't retrieval-shaped yet and would need different query logic
+- [ ] Not yet tested against the live Claude API — deliberately skipped in the autonomous build loop to avoid spending API credits without explicit sign-off; wiring is unit-tested with a fake client instead. Try `groc ask "..."` yourself once you're ready to spend a live call on it.
 
 ## Phase 4 — Frontend
 - [ ] Simple chat interface (web to start; mobile later if useful)
