@@ -1,3 +1,4 @@
+import re
 import tempfile
 from dataclasses import dataclass
 
@@ -252,3 +253,29 @@ def test_unknown_route_returns_plain_404_not_500(app_and_db):
     client = app_and_db.test_client()
     resp = client.get("/this-route-does-not-exist")
     assert resp.status_code == 404
+
+
+def test_api_places_covers_more_than_a_curated_shortlist(app_and_db):
+    # Regression: the city picker used to ship with only 115 hand-curated
+    # cities, which left out most of the country (a real complaint -- towns
+    # like "Zurich, ON" or "100 Mile House, BC" weren't findable at all).
+    # This endpoint must serve the full GeoNames-derived list instead.
+    client = app_and_db.test_client()
+    resp = client.get("/api/places")
+
+    assert resp.status_code == 200
+    places = resp.get_json()
+    assert len(places) > 1000
+
+    by_name = {(name, province): postal for name, province, postal in places}
+    assert by_name[("Toronto", "ON")] == "M3C 0C1"
+    assert ("Zurich", "ON") in by_name  # a small town, not one of the old 115
+
+
+def test_api_places_entries_look_like_real_postal_codes(app_and_db):
+    client = app_and_db.test_client()
+    places = client.get("/api/places").get_json()
+
+    for name, province, postal in places[:50]:
+        assert name and province
+        assert re.match(r"^[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d$", postal), postal

@@ -1,7 +1,9 @@
 """HTTP API + frontend over the search/chat layers."""
 from __future__ import annotations
 
+import json
 import sqlite3
+from pathlib import Path
 from typing import Optional
 
 from flask import Flask, jsonify, render_template, request
@@ -11,6 +13,20 @@ from . import db
 from .chat import ask as chat_ask
 from .github_trigger import trigger_scrape_now
 from .search import best_by_merchant, search_items
+
+_PLACES_PATH = Path(__file__).parent / "data" / "canadian_places.json"
+_places_cache: Optional[list] = None
+
+
+def _load_places() -> list:
+    # Cached at module scope: the file never changes at runtime, and a cold
+    # Vercel function would otherwise re-read+re-parse this ~220KB file on
+    # every single request.
+    global _places_cache
+    if _places_cache is None:
+        with open(_PLACES_PATH, encoding="utf-8") as f:
+            _places_cache = json.load(f)
+    return _places_cache
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
@@ -47,6 +63,17 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
     @app.get("/favicon.ico")
     def favicon():
         return "", 204
+
+    @app.get("/api/places")
+    def api_places():
+        # Every Canadian city/town from GeoNames' open postal code dataset
+        # (CC BY 4.0), one real postal code per place -- lets the "choose
+        # your city" picker cover the whole country, not just a curated
+        # shortlist. Static per deploy, so cache client-side for a day.
+        resp = jsonify(_load_places())
+        resp.cache_control.public = True
+        resp.cache_control.max_age = 86400
+        return resp
 
     @app.get("/api/search")
     def api_search():

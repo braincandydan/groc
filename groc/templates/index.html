@@ -197,6 +197,37 @@
   .list-btn.listed { background: var(--marigold); }
   .remove-btn { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); background: none; border: none; padding: 14px 8px; margin: -14px -8px; }
 
+  /* Check-off (mark picked up while shopping) -- min 40px tap target like
+     .list-btn/.remove-btn above, via padding rather than resizing the
+     visible box. */
+  .check-toggle { display: flex; align-items: center; justify-content: center; width: 40px; align-self: stretch; flex: none; cursor: pointer; }
+  .check-box { width: 20px; height: 20px; flex: none; border: 1.5px solid var(--pine); background: #fff; position: relative; }
+  .check-box::after { content: ''; position: absolute; inset: 3px; background: var(--pine); opacity: 0; }
+  #mylist-rows input:checked + .check-box::after { opacity: 1; }
+  .deal-row.row-done .item-name, .deal-row.row-done .merchant-name { text-decoration: line-through; color: var(--muted); }
+  /* Dim direct children only, not the row itself -- the row needs a fully
+     opaque background (opacity: .6 on .deal-row would make its white
+     background translucent, letting the swipe-to-remove backdrop bleed
+     through underneath even while closed). */
+  .deal-row.row-done > * { opacity: .6; }
+
+  /* Swipe-to-remove (My List only) -- pointer events cover touch + mouse
+     drag with one implementation. .deal-row is the dragged layer; swipe-bg
+     sits underneath, revealed as it slides left. */
+  .swipe-wrap { position: relative; overflow: hidden; touch-action: pan-y; }
+  /* Only as wide as the reveal distance (not the full row) -- its hit area
+     should match exactly what's visible once the row slides left. z-index:0
+     plus .deal-row's z-index:1 below is load-bearing: an absolutely
+     positioned element paints above a static one regardless of DOM order,
+     so without this the red backdrop bled through on top of the row even
+     while fully closed. */
+  .swipe-bg { position: absolute; top: 0; bottom: 0; right: 0; width: 84px; z-index: 0; background: var(--red); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+  .swipe-wrap .deal-row { position: relative; z-index: 1; transition: transform .2s ease; will-change: transform; }
+  .swipe-wrap .deal-row.swiping { transition: none; }
+
+  #mylist-archive-row { display: none; padding: 14px 16px; text-align: center; border-top: 1.5px solid var(--divider); }
+  #mylist-archive-row.open { display: block; }
+
   #no-postal-data { display: none; padding: 32px 24px; }
   #no-postal-data.open { display: block; }
   #no-results { display: none; padding: 32px 24px; flex-direction: column; gap: 18px; }
@@ -238,6 +269,18 @@
   .sheet-title { font-size: 12.5px; font-weight: 800; letter-spacing: .1em; color: var(--pine); }
   .sheet-close { font-size: 12.5px; font-weight: 800; letter-spacing: .07em; color: var(--pine); background: none; border: none; }
   .sheet-body { padding: 16px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+
+  #toast {
+    position: fixed; left: 50%; bottom: 16px; z-index: 20;
+    width: calc(100% - 32px); max-width: 448px;
+    background: var(--pine); color: var(--on-pine-text);
+    padding: 13px 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    font-size: 13px; font-weight: 600;
+    opacity: 0; transform: translate(-50%, 8px); pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease;
+  }
+  #toast.open { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  #toast-undo-btn { background: none; border: none; color: var(--marigold); font-weight: 800; font-size: 12px; letter-spacing: .05em; flex: none; padding: 6px 4px; margin: -6px -4px; }
 
   .segmented { display: flex; border: 1.5px solid var(--pine); }
   .segment { flex: 1; padding: 9px 0; text-align: center; background: none; border: none; border-left: 1.5px solid var(--pine); color: var(--pine); font-size: 12px; font-weight: 700; letter-spacing: .05em; }
@@ -321,6 +364,7 @@
   .city-picker-item:last-child { border-bottom: none; }
   .city-picker-province { color: var(--muted); font-size: 12px; font-weight: 700; }
   #city-picker-empty { padding: 12px; font-size: 13px; color: var(--muted); }
+  #city-picker-more { padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; background: var(--cream); }
 </style>
 </head>
 <body>
@@ -332,16 +376,19 @@
     <div id="onboarding-body">
       <div class="field-group" style="gap: 10px">
         <div id="onboarding-heading">Every flyer deal near you, in one list.</div>
-        <div id="onboarding-sub">Enter your postal code. groc loads this week's deals from every grocery and pharmacy flyer in your area so you can search them all at once.</div>
+        <div id="onboarding-sub">Tell us your city and groc loads this week's deals from every grocery and pharmacy flyer nearby so you can search them all at once.</div>
       </div>
-      <form id="onboarding-form" class="field-group">
+      <div class="field-group">
+        <button type="button" class="btn-primary" id="onboarding-city-picker-btn">CHOOSE YOUR CITY</button>
+        <button type="button" class="text-link-btn" id="onboarding-postal-toggle-btn">Or enter your postal code</button>
+      </div>
+      <form id="onboarding-form" class="field-group" style="display: none">
         <div class="field-label">POSTAL CODE</div>
         <input id="onboarding-postal" placeholder="e.g. M5V 2H1" autocomplete="off">
         <div id="onboarding-postal-error" class="field-error"></div>
         <button type="submit" class="btn-primary">LOAD DEALS</button>
-        <button type="button" class="text-link-btn" id="onboarding-city-picker-btn">Or choose your city</button>
-        <div class="helper-text">Saved on this device. Change it any time from the header.</div>
       </form>
+      <div class="helper-text">Saved on this device. Change it any time from the header.</div>
       <div id="onboarding-footer">
         <div class="footer-label">HOW THIS WORKS</div>
         <div class="helper-text">Prices come straight from this week's flyers — no estimates, no guessing.</div>
@@ -431,6 +478,9 @@
       <div id="mylist-footer">
         <div id="mylist-suggestion"></div>
         <button id="group-by-store-btn" type="button">GROUP BY STORE</button>
+      </div>
+      <div id="mylist-archive-row">
+        <button type="button" class="text-link-btn" id="mylist-archive-btn">✓ Done shopping — archive this list</button>
       </div>
     </div>
   </div>
@@ -559,6 +609,12 @@
     </div>
   </div>
 
+  <!-- ============ Toast ============ -->
+  <div id="toast" role="status" aria-live="polite">
+    <span id="toast-message"></span>
+    <button type="button" id="toast-undo-btn">UNDO</button>
+  </div>
+
 </div>
 <script>
 (function () {
@@ -580,12 +636,6 @@
   let lastQuestion = '';
   let currentAskSources = [];
 
-  // Curated list of major Canadian cities -> a real, verified postal code
-  // for that city (looked up from GeoNames' open Canadian postal code
-  // dataset, never guessed) -- lets someone pick a city instead of typing
-  // an exact postal code. [city, province, postal_code]
-  const CANADIAN_CITIES = [["Abbotsford","BC","V2S 0A1"],["Airdrie","AB","T4A 0A1"],["Ajax","ON","L1M 1B6"],["Banff","AB","T1L 0A1"],["Barrie","ON","L4M 0A1"],["Bathurst","NB","E2A 0A2"],["Belleville","ON","K8N 0A1"],["Brampton","ON","L4T 3B4"],["Brandon","MB","R7A 0A1"],["Brantford","ON","N3P 0A1"],["Burlington","ON","L7L 0A1"],["Burnaby","BC","V3J 0A4"],["Calgary","AB","T1W 0K6"],["Cambridge","ON","N1P 0A1"],["Campbell River","BC","V9H 0A1"],["Camrose","AB","T4V 0A2"],["Canmore","AB","T1W 0A1"],["Charlottetown","PE","C1A 0A1"],["Chilliwack","BC","V2P 0A1"],["Coquitlam","BC","V3B 0A2"],["Corner Brook","NL","A2H 0A5"],["Cornwall","ON","K6H 0A2"],["Courtenay","BC","V9J 1L2"],["Cranbrook","BC","V1C 0A1"],["Dawson City","YT","Y0B 0A3"],["Delta","BC","V3M 0E9"],["Drummondville","QC","J1Z 0E5"],["Edmonton","AB","T2G 1S6"],["Fort McMurray","AB","T9H 0A1"],["Fort St. John","BC","V1J 0A1"],["Fredericton","NB","E3A 0A1"],["Gander","NL","A1V 0A1"],["Gatineau","QC","J8L 0A2"],["Granby","QC","J2G 0A1"],["Grande Prairie","AB","T8V 0A1"],["Guelph","ON","N1C 0A1"],["Halifax","NS","B3H 0A1"],["Hamilton","ON","L8E 0E5"],["Hay River","NT","X0E 0A9"],["Iqaluit","NU","X0A 0A1"],["Kamloops","BC","V1S 0A2"],["Kelowna","BC","V1P 0A1"],["Kingston","ON","K7K 0A1"],["Kitchener","ON","N0B 1N0"],["Laval","QC","H7A 0A1"],["Lethbridge","AB","T1H 0A1"],["Levis","QC","G0S 0B6"],["London","ON","N5V 0A2"],["Longueuil","QC","J4G 0A1"],["Markham","ON","L3P 0A1"],["Medicine Hat","AB","T1A 0A1"],["Milton","ON","L9E 0A1"],["Mississauga","ON","L4T 0A1"],["Moncton","NB","E1A 0A3"],["Montreal","QC","H1A 0A1"],["Moose Jaw","SK","S6H 0A1"],["Nanaimo","BC","V9R 0A1"],["New Glasgow","NS","B2H 0A1"],["Niagara Falls","ON","L2E 0A1"],["North Bay","ON","P1A 0A1"],["Oakville","ON","L6H 0A1"],["Orillia","ON","L3V 0A1"],["Oshawa","ON","L1G 0A1"],["Ottawa","ON","K0A 0E5"],["Penticton","BC","V2A 0A1"],["Peterborough","ON","K9H 0A1"],["Pickering","ON","L1V 0A1"],["Prince Albert","SK","S6V 0A1"],["Prince George","BC","V2K 0A1"],["Quebec City","QC","G1A 0A2"],["Rankin Inlet","NU","X0C 0A1"],["Red Deer","AB","T4N 0A1"],["Regina","SK","S4M 0A1"],["Repentigny","QC","J5Y 0A1"],["Richmond","BC","V6P 0B9"],["Richmond Hill","ON","L3P 3J4"],["Rimouski","QC","G0L 0B3"],["Saanich","BC","V8M 0A1"],["Saguenay","QC","G7B 3N8"],["Saint John","NB","E2E 0S9"],["Sarnia","ON","N7S 0A1"],["Saskatoon","SK","S7H 0A1"],["Sault Ste. Marie","ON","P6A 0A1"],["Shawinigan","QC","G9N 0A1"],["Sherbrooke","QC","J0B 2C0"],["Spruce Grove","AB","T7X 0A1"],["Squamish","BC","V8B 0A1"],["St. Albert","AB","T8N 0A1"],["St. Catharines","ON","L2M 0A1"],["St. John's","NL","A0A 1J0"],["Steinbach","MB","R5G 0A1"],["Sudbury","ON","P3A 0A1"],["Summerside","PE","C1N 0A1"],["Surrey","BC","V3R 0A1"],["Swift Current","SK","S9H 0A1"],["Sydney","NS","B1L 0B5"],["Terrebonne","QC","J0N 1H0"],["Thompson","MB","R8N 0A1"],["Thunder Bay","ON","P7A 0A2"],["Timmins","ON","P4N 0A2"],["Toronto","ON","M3C 0C1"],["Trois-Rivieres","QC","G8T 0A1"],["Truro","NS","B2N 0A2"],["Vancouver","BC","V5K 0A1"],["Vaughan","ON","L6A 0K9"],["Vernon","BC","V1B 0A2"],["Victoria","BC","V8N 0A1"],["Waterloo","ON","N2J 0A1"],["Whistler","BC","V0N 0A0"],["Whitby","ON","L1M 0A1"],["Whitehorse","YT","Y1A 0A1"],["Windsor","ON","N8N 0A1"],["Winnipeg","MB","R2C 0A1"],["Yellowknife","NT","X1A 0A1"],["Yorkton","SK","S3N 0A1"]];
-
   function loadMyList() {
     try { return JSON.parse(localStorage.getItem('groc_my_list') || '[]'); } catch (e) { return []; }
   }
@@ -595,7 +645,10 @@
   function isListed(row) { return myList.some(r => r.id === row.id); }
   function toggleListed(row) {
     if (isListed(row)) { myList = myList.filter(r => r.id !== row.id); }
-    else { myList.push(row); }
+    // Copy rather than push the same reference -- My List rows carry their
+    // own `pickedUp` state (the shopping check-off), which must not also
+    // strike through the same item back in the Deals tab.
+    else { myList.push(Object.assign({}, row)); }
     saveMyList();
   }
 
@@ -687,15 +740,39 @@
     }
   }
 
+  // ---------- Toast (undo-able confirmations) ----------
+  let toastTimer = null;
+  function showToast(message, undoFn) {
+    clearTimeout(toastTimer);
+    const toast = document.getElementById('toast');
+    document.getElementById('toast-message').textContent = message;
+    const undoBtn = document.getElementById('toast-undo-btn');
+    undoBtn.style.display = undoFn ? 'block' : 'none';
+    undoBtn.onclick = undoFn ? () => { undoFn(); hideToast(); } : null;
+    toast.classList.add('open');
+    toastTimer = setTimeout(hideToast, 5000);
+  }
+  function hideToast() {
+    document.getElementById('toast').classList.remove('open');
+  }
+
   // ---------- Deal row rendering ----------
   function dealRowHtml(row, opts) {
     opts = opts || {};
     const p = effectivePrice(row);
     const suffix = priceSuffixText(row);
     const listed = isListed(row);
+    const doneShopping = !!row.pickedUp;
     const bgStyle = row.cutout_image_url ? ' style="background-image: url(\'' + row.cutout_image_url.replace(/'/g, "%27") + '\')"' : '';
-    return (
-      '<div class="deal-row" data-id="' + row.id + '">' +
+    const inner = (
+      '<div class="deal-row' + (doneShopping ? ' row-done' : '') + '" data-id="' + row.id + '">' +
+        (opts.remove
+          ? '<label class="check-toggle">' +
+              '<input type="checkbox" class="visually-hidden" data-action="check" data-id="' + row.id + '"' + (doneShopping ? ' checked' : '') + '>' +
+              '<span class="check-box" aria-hidden="true"></span>' +
+              '<span class="visually-hidden">Mark ' + escapeHtml(row.item_name) + ' as picked up</span>' +
+            '</label>'
+          : '') +
         '<div class="deal-image' + (opts.small ? ' small' : '') + '"' + bgStyle + '></div>' +
         '<div class="deal-mid">' +
           '<div class="deal-top-line">' +
@@ -720,6 +797,89 @@
         '</div>' +
       '</div>'
     );
+    if (!opts.remove) return inner;
+    // My List rows get a swipe-to-reveal-delete wrapper -- the REMOVE
+    // backdrop sits underneath and shows as the row above it slides left.
+    return (
+      '<div class="swipe-wrap" data-id="' + row.id + '">' +
+        '<div class="swipe-bg" data-action="swipe-remove" data-id="' + row.id + '">REMOVE</div>' +
+        inner +
+      '</div>'
+    );
+  }
+
+  function removeFromMyList(id) {
+    const idx = myList.findIndex(r => String(r.id) === String(id));
+    if (idx === -1) return;
+    const removed = myList[idx];
+    myList = myList.filter(r => String(r.id) !== String(id));
+    saveMyList();
+    renderMyList();
+    renderDeals();
+    showToast('Removed ' + removed.item_name + '.', () => {
+      myList.splice(Math.min(idx, myList.length), 0, removed);
+      saveMyList();
+      renderMyList();
+      renderDeals();
+    });
+  }
+
+  // Swipe-to-remove uses pointer events (not touch-only) so one
+  // implementation covers touch drag on mobile and mouse drag on desktop --
+  // both fire the same pointerdown/pointermove/pointerup sequence.
+  const SWIPE_REVEAL_PX = 84;
+  let openSwipeRowEl = null;
+  function closeOpenSwipe() {
+    if (openSwipeRowEl) {
+      openSwipeRowEl.style.transform = 'translateX(0)';
+      openSwipeRowEl.dataset.revealed = '0';
+      openSwipeRowEl = null;
+    }
+  }
+  function attachSwipeHandlers(container) {
+    container.querySelectorAll('.swipe-wrap').forEach(wrap => {
+      const rowEl = wrap.querySelector('.deal-row');
+      let startX = 0, startY = 0, dx = 0, dragging = false, decided = false, horizontal = false;
+      wrap.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (openSwipeRowEl && openSwipeRowEl !== rowEl) closeOpenSwipe();
+        startX = e.clientX; startY = e.clientY; dx = 0; dragging = true; decided = false; horizontal = false;
+        rowEl.classList.add('swiping');
+      });
+      wrap.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        const rawDx = e.clientX - startX;
+        const rawDy = e.clientY - startY;
+        if (!decided) {
+          if (Math.abs(rawDx) < 6 && Math.abs(rawDy) < 6) return;
+          decided = true;
+          horizontal = Math.abs(rawDx) > Math.abs(rawDy);
+          if (!horizontal) { dragging = false; rowEl.classList.remove('swiping'); return; }
+          if (wrap.setPointerCapture) wrap.setPointerCapture(e.pointerId);
+        }
+        if (!horizontal) return;
+        const base = rowEl.dataset.revealed === '1' ? -SWIPE_REVEAL_PX : 0;
+        dx = Math.max(-SWIPE_REVEAL_PX, Math.min(0, base + rawDx));
+        rowEl.style.transform = 'translateX(' + dx + 'px)';
+      });
+      function endDrag() {
+        if (!dragging) return;
+        dragging = false;
+        rowEl.classList.remove('swiping');
+        if (!horizontal) return;
+        if (dx <= -SWIPE_REVEAL_PX * 0.6) {
+          rowEl.style.transform = 'translateX(-' + SWIPE_REVEAL_PX + 'px)';
+          rowEl.dataset.revealed = '1';
+          openSwipeRowEl = rowEl;
+        } else {
+          rowEl.style.transform = 'translateX(0)';
+          rowEl.dataset.revealed = '0';
+          if (openSwipeRowEl === rowEl) openSwipeRowEl = null;
+        }
+      }
+      wrap.addEventListener('pointerup', endDrag);
+      wrap.addEventListener('pointercancel', endDrag);
+    });
   }
 
   function attachRowHandlers(container) {
@@ -733,18 +893,33 @@
     container.querySelectorAll('[data-action="remove"]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        myList = myList.filter(r => String(r.id) !== btn.dataset.id);
-        saveMyList();
-        renderMyList();
-        renderDeals();
+        removeFromMyList(btn.dataset.id);
+      });
+    });
+    container.querySelectorAll('[data-action="swipe-remove"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSwipeRowEl = null;
+        removeFromMyList(btn.dataset.id);
+      });
+    });
+    container.querySelectorAll('.check-toggle').forEach(label => {
+      label.addEventListener('click', (e) => e.stopPropagation());
+    });
+    container.querySelectorAll('[data-action="check"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const row = myList.find(r => String(r.id) === String(cb.dataset.id));
+        if (row) { row.pickedUp = cb.checked; saveMyList(); renderMyList(); }
       });
     });
     container.querySelectorAll('.deal-row').forEach(rowEl => {
       rowEl.addEventListener('click', () => {
+        if (rowEl.dataset.revealed === '1') { closeOpenSwipe(); return; }
         const row = findRowById(rowEl.dataset.id);
         if (row) openItemDetail(row);
       });
     });
+    attachSwipeHandlers(container);
   }
 
   // ---------- Filtering / sorting ----------
@@ -1017,7 +1192,9 @@
     attachRowHandlers(rowsEl);
 
     const storeCount = new Set(myList.map(r => r.merchant)).size;
-    document.getElementById('mylist-count').textContent = count + ' ITEM' + (count === 1 ? '' : 'S') + ' · ' + storeCount + ' STORE' + (storeCount === 1 ? '' : 'S');
+    const pickedUpCount = myList.filter(r => r.pickedUp).length;
+    const itemsLabel = pickedUpCount > 0 ? pickedUpCount + ' OF ' + count + ' ITEM' + (count === 1 ? '' : 'S') : count + ' ITEM' + (count === 1 ? '' : 'S');
+    document.getElementById('mylist-count').textContent = itemsLabel + ' · ' + storeCount + ' STORE' + (storeCount === 1 ? '' : 'S');
     const total = myList.reduce((sum, r) => sum + (r.price || 0), 0);
     document.getElementById('mylist-total').textContent = '$' + total.toFixed(2);
 
@@ -1031,11 +1208,36 @@
     } else {
       footerEl.classList.remove('open');
     }
+    document.getElementById('mylist-archive-row').classList.toggle('open', count > 0);
   }
   document.getElementById('group-by-store-btn').addEventListener('click', () => {
     myList = myList.slice().sort((a, b) => a.merchant.localeCompare(b.merchant));
     renderMyList();
   });
+
+  function archiveMyList() {
+    if (!myList.length) return;
+    const snapshot = myList.slice();
+    let archive = [];
+    try { archive = JSON.parse(localStorage.getItem('groc_my_list_archive') || '[]'); } catch (e) { archive = []; }
+    archive.unshift({ archivedAt: new Date().toISOString(), items: snapshot });
+    archive = archive.slice(0, 20); // keep the last 20 shopping trips
+    try { localStorage.setItem('groc_my_list_archive', JSON.stringify(archive)); } catch (e) { /* storage unavailable */ }
+
+    myList = [];
+    saveMyList();
+    renderMyList();
+    renderDeals();
+    showToast('Nice work! 🎉 List archived — starting fresh.', () => {
+      archive.shift();
+      try { localStorage.setItem('groc_my_list_archive', JSON.stringify(archive)); } catch (e) { /* storage unavailable */ }
+      myList = snapshot;
+      saveMyList();
+      renderMyList();
+      renderDeals();
+    });
+  }
+  document.getElementById('mylist-archive-btn').addEventListener('click', archiveMyList);
 
   // ---------- Tabs ----------
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1065,21 +1267,64 @@
   document.getElementById('filter-query').addEventListener('input', renderDeals);
 
   // ---------- City picker ----------
+  // Every Canadian city/town (7,300+, from GeoNames' open postal code
+  // dataset) lives server-side at /api/places -- too big to embed inline on
+  // every page load, so it's fetched once (the browser caches it after) and
+  // kicked off in the background here rather than waiting until the picker
+  // opens.
+  let canadianPlaces = [];
+  let placesLoadPromise = null;
+  function loadCanadianPlaces() {
+    if (!placesLoadPromise) {
+      placesLoadPromise = fetch('/api/places')
+        .then(r => r.json())
+        .then(data => { canadianPlaces = data; })
+        .catch(() => { canadianPlaces = []; });
+    }
+    return placesLoadPromise;
+  }
+  loadCanadianPlaces();
+
+  const CITY_PICKER_RESULT_CAP = 50;
+
   function renderCityPickerList(filterText) {
-    const term = filterText.trim().toLowerCase();
-    const matches = CANADIAN_CITIES.filter(([city, province]) =>
-      !term || city.toLowerCase().includes(term) || province.toLowerCase().includes(term)
-    );
     const listEl = document.getElementById('city-picker-list');
+    const term = filterText.trim().toLowerCase();
+
+    if (placesLoadPromise && canadianPlaces.length === 0) {
+      listEl.innerHTML = '<div id="city-picker-empty">Loading cities…</div>';
+      loadCanadianPlaces().then(() => renderCityPickerList(document.getElementById('city-picker-search').value));
+      return;
+    }
+    if (!term) {
+      listEl.innerHTML = '<div id="city-picker-empty">Type a city or town — every one in Canada is here.</div>';
+      return;
+    }
+
+    // Names starting with the term rank above names that merely contain it,
+    // so typing "Van" surfaces Vancouver before, say, "Sun Vancouver Lake".
+    const startsWith = [];
+    const contains = [];
+    for (const place of canadianPlaces) {
+      const [city, province] = place;
+      const cityLower = city.toLowerCase();
+      if (cityLower.startsWith(term)) startsWith.push(place);
+      else if (cityLower.includes(term) || province.toLowerCase() === term) contains.push(place);
+    }
+    const matches = startsWith.concat(contains);
+
     if (matches.length === 0) {
       listEl.innerHTML = '<div id="city-picker-empty">No cities match that.</div>';
       return;
     }
-    listEl.innerHTML = matches.map(([city, province, postal]) =>
+    const shown = matches.slice(0, CITY_PICKER_RESULT_CAP);
+    listEl.innerHTML = shown.map(([city, province, postal]) =>
       '<button class="city-picker-item" type="button" data-postal="' + escapeHtml(postal) + '">' +
         '<span>' + escapeHtml(city) + '</span><span class="city-picker-province">' + escapeHtml(province) + '</span>' +
       '</button>'
-    ).join('');
+    ).join('') + (matches.length > shown.length
+      ? '<div id="city-picker-more">+' + (matches.length - shown.length) + ' more — keep typing to narrow it down</div>'
+      : '');
     listEl.querySelectorAll('.city-picker-item').forEach(btn => {
       btn.addEventListener('click', () => {
         const postal = btn.dataset.postal;
@@ -1103,6 +1348,7 @@
     const overlay = document.getElementById('city-picker-overlay');
     overlay.classList.add('open');
     trapFocusIn(overlay);
+    document.getElementById('city-picker-search').focus();
   }
   function closeCityPicker() {
     const overlay = document.getElementById('city-picker-overlay');
@@ -1110,6 +1356,12 @@
     releaseFocusTrap(overlay);
   }
   document.getElementById('onboarding-city-picker-btn').addEventListener('click', openCityPicker);
+  document.getElementById('onboarding-postal-toggle-btn').addEventListener('click', (e) => {
+    e.target.style.display = 'none';
+    const form = document.getElementById('onboarding-form');
+    form.style.display = 'flex';
+    document.getElementById('onboarding-postal').focus();
+  });
   document.getElementById('postal-edit-city-picker-btn').addEventListener('click', openCityPicker);
   document.getElementById('city-picker-close-btn').addEventListener('click', closeCityPicker);
   document.getElementById('city-picker-scrim').addEventListener('click', closeCityPicker);
