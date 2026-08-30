@@ -77,6 +77,8 @@
     font-size: 14px; font-weight: 800; letter-spacing: .1em; display: flex; align-items: center; justify-content: center;
   }
   .helper-text { font-size: 12px; color: var(--muted); text-wrap: pretty; }
+  .field-error { display: none; font-size: 12px; font-weight: 600; color: var(--red); text-wrap: pretty; }
+  .field-error.open { display: block; }
   #onboarding-footer {
     margin-top: auto; border-top: 1.5px solid var(--divider); padding-top: 16px;
     display: flex; flex-direction: column; gap: 8px;
@@ -185,6 +187,8 @@
   .list-btn.listed { background: var(--marigold); }
   .remove-btn { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); background: none; border: none; padding: 0; }
 
+  #no-postal-data { display: none; padding: 32px 24px; }
+  #no-postal-data.open { display: block; }
   #no-results { display: none; padding: 32px 24px; flex-direction: column; gap: 18px; }
   #no-results.open { display: flex; }
   .no-results-heading { font-size: 20px; font-weight: 800; color: var(--pine); letter-spacing: -.02em; }
@@ -300,6 +304,7 @@
       <form id="onboarding-form" class="field-group">
         <div class="field-label">POSTAL CODE</div>
         <input id="onboarding-postal" placeholder="e.g. M5V 2H1" autocomplete="off">
+        <div id="onboarding-postal-error" class="field-error"></div>
         <button type="submit" class="btn-primary">LOAD DEALS</button>
         <div class="helper-text">Saved on this device. Change it any time from the header.</div>
       </form>
@@ -321,6 +326,7 @@
         <input id="postal-edit-input" autocomplete="off">
         <button type="submit" id="postal-edit-save">LOAD</button>
       </form>
+      <div id="postal-edit-error" class="field-error" style="margin: -4px 0 0"></div>
       <div id="tab-switcher">
         <button type="button" class="tab-btn active" data-tab="deals">DEALS</button>
         <button type="button" class="tab-btn" data-tab="mylist" id="mylist-tab-btn">MY LIST</button>
@@ -355,6 +361,12 @@
         <div id="loading-sub">You can start filtering as soon as it finishes.</div>
       </div>
       <div id="results-list"></div>
+      <div id="no-postal-data">
+        <div class="field-group" style="gap: 8px">
+          <div class="no-results-heading">No deals for this postal code yet.</div>
+          <div class="no-results-body">We don't have flyer data here yet — this postal code has been noted, and we scrape new areas on a daily schedule. Check back later, or try a postal code you know has data (e.g. <strong>M5V 2H1</strong> or <strong>V1Y 7M4</strong>).</div>
+        </div>
+      </div>
       <div id="no-results">
         <div class="field-group" style="gap: 8px">
           <div class="no-results-heading">No flyer items match that.</div>
@@ -631,13 +643,23 @@
 
     const listEl = document.getElementById('results-list');
     const noResultsEl = document.getElementById('no-results');
+    const noPostalDataEl = document.getElementById('no-postal-data');
     const bestNoticeEl = document.getElementById('best-notice');
 
-    if (matched.length === 0 && allResults.length > 0) {
+    if (allResults.length === 0) {
+      // Distinct from "no matches for your filter" -- this postal code has
+      // zero data at all, which is now a normal first-time outcome (it just
+      // got queued for the next scheduled scrape), not a broken-looking void.
       listEl.innerHTML = '';
+      noResultsEl.classList.remove('open');
+      noPostalDataEl.classList.add('open');
+    } else if (matched.length === 0) {
+      listEl.innerHTML = '';
+      noPostalDataEl.classList.remove('open');
       noResultsEl.classList.add('open');
       renderNoResults();
     } else {
+      noPostalDataEl.classList.remove('open');
       noResultsEl.classList.remove('open');
       listEl.innerHTML = shown.map(r => dealRowHtml(r)).join('');
       attachRowHandlers(listEl);
@@ -864,9 +886,14 @@
   document.getElementById('filter-query').addEventListener('input', renderDeals);
 
   // ---------- Postal code entry / switching ----------
+  function isValidPostalCode(value) {
+    // Canadian format: letter-digit-letter, optional space/dash, digit-letter-digit.
+    return /^[A-Za-z]\d[A-Za-z]\s?-?\d[A-Za-z]\d$/.test(value.trim());
+  }
   document.getElementById('postal-chip').addEventListener('click', () => {
     const row = document.getElementById('postal-edit-row');
     row.classList.toggle('open');
+    document.getElementById('postal-edit-error').classList.remove('open');
     if (row.classList.contains('open')) {
       document.getElementById('postal-edit-input').value = postalCode;
       document.getElementById('postal-edit-input').focus();
@@ -875,14 +902,28 @@
   document.getElementById('postal-edit-row').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = document.getElementById('postal-edit-input').value.trim();
+    const errorEl = document.getElementById('postal-edit-error');
     if (!v) return;
+    if (!isValidPostalCode(v)) {
+      errorEl.textContent = "That doesn't look like a postal code (try the format A1A 1A1).";
+      errorEl.classList.add('open');
+      return;
+    }
+    errorEl.classList.remove('open');
     document.getElementById('postal-edit-row').classList.remove('open');
     startLoadingFor(v);
   });
   document.getElementById('onboarding-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = document.getElementById('onboarding-postal').value.trim();
+    const errorEl = document.getElementById('onboarding-postal-error');
     if (!v) return;
+    if (!isValidPostalCode(v)) {
+      errorEl.textContent = "That doesn't look like a postal code — try the format A1A 1A1.";
+      errorEl.classList.add('open');
+      return;
+    }
+    errorEl.classList.remove('open');
     startLoadingFor(v);
   });
 
