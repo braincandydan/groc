@@ -255,6 +255,27 @@
   /* ---------- My List ---------- */
   #mylist-view { display: none; flex-direction: column; }
   #mylist-view.open { display: flex; }
+  #mylist-add-row { display: flex; gap: 8px; padding: 12px 16px; background: var(--cream); border-bottom: 1.5px solid var(--pine); }
+  #mylist-add-input {
+    flex: 1; height: 40px; border: 1.5px solid var(--pine); background: #fff; padding: 0 10px;
+    font-size: 16px; font-weight: 500; color: var(--ink);
+  }
+  #mylist-add-input::placeholder { color: var(--input-placeholder); font-weight: 400; }
+  #mylist-add-btn {
+    height: 40px; padding: 0 16px; background: var(--marigold); border: none; color: var(--pine);
+    font-size: 12px; font-weight: 800; letter-spacing: .06em;
+  }
+  .mylist-section-heading { padding: 10px 16px 4px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted); background: var(--cream); }
+  /* Matched-deal sub-rows nest under a shopping-list item -- indented to
+     roughly align under its text (past the 40px check-toggle + 12px gap),
+     not swipeable/removable themselves since the underlying shopping-list
+     item is what owns removal. */
+  .matched-deals { display: flex; flex-direction: column; padding: 0 16px 8px 56px; gap: 6px; background: #fff; border-bottom: 1.5px solid var(--pine); }
+  .matched-deal-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .matched-deal-name { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .matched-deal-price { flex: none; font-size: 13px; font-weight: 700; color: var(--pine); font-variant-numeric: tabular-nums; }
+  .no-match-text { padding: 0 16px 10px 56px; font-size: 12px; color: var(--muted); background: #fff; border-bottom: 1.5px solid var(--pine); }
+  .on-list-badge { flex: none; padding: 1px 6px; background: var(--pine); font-size: 9.5px; font-weight: 800; letter-spacing: .05em; color: var(--marigold); }
   #mylist-summary { padding: 12px 16px; background: var(--cream-deep); border-bottom: 1.5px solid var(--pine); display: flex; align-items: baseline; justify-content: space-between; }
   #mylist-count { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--pine); }
   #mylist-total-row { display: flex; align-items: baseline; gap: 6px; }
@@ -483,11 +504,15 @@
 
     <!-- My List tab -->
     <div id="mylist-view">
+      <form id="mylist-add-row">
+        <input id="mylist-add-input" type="text" autocomplete="off" placeholder="Add an item… e.g. milk, eggs, bread">
+        <button type="submit" id="mylist-add-btn">ADD</button>
+      </form>
       <div id="mylist-summary">
         <div id="mylist-count"></div>
         <div id="mylist-total-row"><span id="mylist-total-label">TOTAL</span><span id="mylist-total"></span></div>
       </div>
-      <div id="mylist-empty">Nothing on your list yet. Add items from Deals with <strong>+ LIST</strong>.</div>
+      <div id="mylist-empty">Nothing on your list yet. Add items above, or tap <strong>+ LIST</strong> on a deal.</div>
       <div id="mylist-rows"></div>
       <div id="mylist-footer">
         <div id="mylist-suggestion"></div>
@@ -756,6 +781,7 @@
   let sortMode = 'price';
   let currentTab = 'deals';
   let myList = loadMyList();
+  let shoppingList = loadShoppingList();
   let lastQuestion = '';
   let currentAskSources = [];
 
@@ -773,6 +799,76 @@
     // strike through the same item back in the Deals tab.
     else { myList.push(Object.assign({}, row)); }
     saveMyList();
+  }
+
+  // ---------- Shopping list (plain typed items, matched live against
+  // whatever deals are currently loaded -- distinct from myList, which only
+  // holds specific deals explicitly pulled in via + LIST) ----------
+  function loadShoppingList() {
+    try { return JSON.parse(localStorage.getItem('groc_shopping_list') || '[]'); } catch (e) { return []; }
+  }
+  function saveShoppingList() {
+    try { localStorage.setItem('groc_shopping_list', JSON.stringify(shoppingList)); } catch (e) { /* storage unavailable */ }
+  }
+  function makeShoppingListId() {
+    return 'sl-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  }
+  // Splits on commas/newlines so pasting or typing "milk, eggs, bread" in
+  // one go adds three items -- the other real way people build lists,
+  // alongside adding one at a time. Skips anything that case-insensitively
+  // matches an existing not-done entry rather than erroring -- re-adding
+  // "milk" after it's done is fine (checked off items keep their own row
+  // until archived), duplicating an active one isn't useful.
+  function addShoppingListItems(rawText) {
+    const parts = rawText.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+    if (!parts.length) return false;
+    const activeLower = new Set(shoppingList.filter(i => !i.done).map(i => i.text.toLowerCase()));
+    let added = false;
+    for (const text of parts) {
+      const lower = text.toLowerCase();
+      if (activeLower.has(lower)) continue;
+      shoppingList.push({ id: makeShoppingListId(), text: text, done: false, addedAt: new Date().toISOString() });
+      activeLower.add(lower);
+      added = true;
+    }
+    if (added) saveShoppingList();
+    return added;
+  }
+  function removeShoppingListItem(id) {
+    const idx = shoppingList.findIndex(i => String(i.id) === String(id));
+    if (idx === -1) return;
+    const removed = shoppingList[idx];
+    shoppingList = shoppingList.filter(i => String(i.id) !== String(id));
+    saveShoppingList();
+    renderMyList();
+    renderDeals(); // an item leaving the shopping list can drop its ON LIST badge on the Deals tab
+    showToast('Removed ' + removed.text + '.', () => {
+      shoppingList.splice(Math.min(idx, shoppingList.length), 0, removed);
+      saveShoppingList();
+      renderMyList();
+      renderDeals();
+    });
+  }
+  function priceOrInfinity(row) {
+    const p = effectivePrice(row);
+    return p == null ? Infinity : p;
+  }
+  // Case-insensitive substring match against whatever's currently loaded for
+  // this postal code -- simple on purpose (no fuzzy matching library): a
+  // flyer's item_name is usually verbose ("Beatrice 2% Milk 4L"), so a plain
+  // "milk" reliably matches it, cheapest-first, capped at 3 so one broad
+  // term doesn't flood the list.
+  function matchingDealsForText(text) {
+    const q = text.trim().toLowerCase();
+    if (!q) return [];
+    return allResults
+      .filter(row => row.item_name.toLowerCase().includes(q))
+      .sort((a, b) => priceOrInfinity(a) - priceOrInfinity(b))
+      .slice(0, 3);
+  }
+  function matchesAnyShoppingListItem(row) {
+    const name = row.item_name.toLowerCase();
+    return shoppingList.some(i => !i.done && i.text.trim() && name.includes(i.text.trim().toLowerCase()));
   }
 
   function storeInitials(name) {
@@ -901,6 +997,7 @@
           '<div class="deal-top-line">' +
             '<div class="mono-badge">' + escapeHtml(storeInitials(row.merchant)) + '</div>' +
             '<div class="merchant-name">' + escapeHtml(row.merchant) + '</div>' +
+            (opts.onList ? '<div class="on-list-badge">📝 ON LIST</div>' : '') +
           '</div>' +
           '<div class="item-name">' + escapeHtml(row.item_name) + '</div>' +
           '<div class="deal-bottom-line">' +
@@ -929,6 +1026,57 @@
         inner +
       '</div>'
     );
+  }
+
+  // A shopping-list entry's own row -- checkbox + typed text + swipe (and
+  // inline REMOVE, for the same reason dealRowHtml's remove opts keeps
+  // both: the swipe gesture alone isn't discoverable/accessible). Kept as
+  // its own small function rather than another dealRowHtml opts branch --
+  // a shopping-list item has no merchant/price/image, so it doesn't share
+  // enough shape with a deal row to make a shared template clearer.
+  function shoppingItemRowHtml(item) {
+    const inner = (
+      '<div class="deal-row' + (item.done ? ' row-done' : '') + '" data-id="' + item.id + '">' +
+        '<label class="check-toggle">' +
+          '<input type="checkbox" class="visually-hidden" data-action="shopping-check" data-id="' + item.id + '"' + (item.done ? ' checked' : '') + '>' +
+          '<span class="check-box" aria-hidden="true"></span>' +
+          '<span class="visually-hidden">Mark ' + escapeHtml(item.text) + ' as picked up</span>' +
+        '</label>' +
+        '<div class="deal-mid"><div class="item-name">' + escapeHtml(item.text) + '</div></div>' +
+        '<button class="remove-btn" data-action="shopping-remove" data-id="' + item.id + '">REMOVE</button>' +
+      '</div>'
+    );
+    return (
+      '<div class="swipe-wrap" data-id="' + item.id + '">' +
+        '<div class="swipe-bg" data-action="shopping-swipe-remove" data-id="' + item.id + '">REMOVE</div>' +
+        inner +
+      '</div>'
+    );
+  }
+
+  function matchedDealRowHtml(row) {
+    return (
+      '<div class="matched-deal-row" data-id="' + row.id + '">' +
+        '<div class="mono-badge">' + escapeHtml(storeInitials(row.merchant)) + '</div>' +
+        '<div class="matched-deal-name">' + escapeHtml(row.item_name) + '</div>' +
+        '<div class="matched-deal-price">' + priceText(row) + '</div>' +
+      '</div>'
+    );
+  }
+
+  function shoppingListSectionHtml() {
+    return shoppingList.map(item => {
+      let matchesHtml = '';
+      if (!item.done) {
+        if (allResults.length > 0) {
+          const matches = matchingDealsForText(item.text);
+          matchesHtml = matches.length
+            ? '<div class="matched-deals">' + matches.map(matchedDealRowHtml).join('') + '</div>'
+            : '<div class="no-match-text">No matching deals yet for "' + escapeHtml(item.text) + '".</div>';
+        }
+      }
+      return shoppingItemRowHtml(item) + matchesHtml;
+    }).join('');
   }
 
   function removeFromMyList(id) {
@@ -1035,6 +1183,33 @@
         if (row) { row.pickedUp = cb.checked; saveMyList(); renderMyList(); }
       });
     });
+    container.querySelectorAll('[data-action="shopping-check"]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const item = shoppingList.find(i => String(i.id) === String(cb.dataset.id));
+        // Checking an item off drops its ON LIST badge on the Deals tab too --
+        // renderDeals() reflects the same "not-done" rule matchesAnyShoppingListItem uses.
+        if (item) { item.done = cb.checked; saveShoppingList(); renderMyList(); renderDeals(); }
+      });
+    });
+    container.querySelectorAll('[data-action="shopping-remove"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removeShoppingListItem(btn.dataset.id);
+      });
+    });
+    container.querySelectorAll('[data-action="shopping-swipe-remove"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSwipeRowEl = null;
+        removeShoppingListItem(btn.dataset.id);
+      });
+    });
+    container.querySelectorAll('.matched-deal-row').forEach(el => {
+      el.addEventListener('click', () => {
+        const row = findRowById(el.dataset.id);
+        if (row) openItemDetail(row);
+      });
+    });
     container.querySelectorAll('.deal-row').forEach(rowEl => {
       rowEl.addEventListener('click', () => {
         if (rowEl.dataset.revealed === '1') { closeOpenSwipe(); return; }
@@ -1137,7 +1312,7 @@
     } else {
       noPostalDataEl.classList.remove('open');
       noResultsEl.classList.remove('open');
-      listEl.innerHTML = shown.map(r => dealRowHtml(r)).join('');
+      listEl.innerHTML = shown.map(r => dealRowHtml(r, { onList: matchesAnyShoppingListItem(r) })).join('');
       attachRowHandlers(listEl);
     }
 
@@ -1318,12 +1493,26 @@
 
   function renderMyList() {
     const count = myList.length;
-    document.getElementById('mylist-tab-btn').textContent = 'MY LIST' + (count ? ' · ' + count : '');
-    document.getElementById('mylist-empty').style.display = count ? 'none' : 'block';
+    const activeShoppingCount = shoppingList.filter(i => !i.done).length;
+    const tabCount = count + activeShoppingCount;
+    document.getElementById('mylist-tab-btn').textContent = 'MY LIST' + (tabCount ? ' · ' + tabCount : '');
+    document.getElementById('mylist-empty').style.display = (count === 0 && shoppingList.length === 0) ? 'block' : 'none';
     document.getElementById('mylist-summary').style.display = count ? 'flex' : 'none';
 
+    // Two sections in one list -- typed shopping-list items (with their
+    // live-matched deals) above specific saved deals. Headings only appear
+    // when both are in use; someone who sticks to one mode shouldn't see a
+    // label for a section they never touch.
+    const showBothHeadings = shoppingList.length > 0 && count > 0;
+    const shoppingHtml = shoppingList.length
+      ? (showBothHeadings ? '<div class="mylist-section-heading">YOUR LIST</div>' : '') + shoppingListSectionHtml()
+      : '';
+    const dealsHtml = count
+      ? (showBothHeadings ? '<div class="mylist-section-heading">SAVED DEALS</div>' : '') + myList.map(r => dealRowHtml(r, { small: true, remove: true })).join('')
+      : '';
+
     const rowsEl = document.getElementById('mylist-rows');
-    rowsEl.innerHTML = myList.map(r => dealRowHtml(r, { small: true, remove: true })).join('');
+    rowsEl.innerHTML = shoppingHtml + dealsHtml;
     attachRowHandlers(rowsEl);
 
     const storeCount = new Set(myList.map(r => r.merchant)).size;
@@ -1343,7 +1532,7 @@
     } else {
       footerEl.classList.remove('open');
     }
-    document.getElementById('mylist-archive-row').classList.toggle('open', count > 0);
+    document.getElementById('mylist-archive-row').classList.toggle('open', count > 0 || shoppingList.length > 0);
   }
   document.getElementById('group-by-store-btn').addEventListener('click', () => {
     myList = myList.slice().sort((a, b) => a.merchant.localeCompare(b.merchant));
@@ -1351,28 +1540,42 @@
   });
 
   function archiveMyList() {
-    if (!myList.length) return;
-    const snapshot = myList.slice();
+    if (!myList.length && !shoppingList.length) return;
+    const dealsSnapshot = myList.slice();
+    const shoppingSnapshot = shoppingList.slice();
     let archive = [];
     try { archive = JSON.parse(localStorage.getItem('groc_my_list_archive') || '[]'); } catch (e) { archive = []; }
-    archive.unshift({ archivedAt: new Date().toISOString(), items: snapshot });
+    archive.unshift({ archivedAt: new Date().toISOString(), items: dealsSnapshot, shoppingList: shoppingSnapshot });
     archive = archive.slice(0, 20); // keep the last 20 shopping trips
     try { localStorage.setItem('groc_my_list_archive', JSON.stringify(archive)); } catch (e) { /* storage unavailable */ }
 
     myList = [];
+    shoppingList = [];
     saveMyList();
+    saveShoppingList();
     renderMyList();
     renderDeals();
     showToast('Nice work! 🎉 List archived — starting fresh.', () => {
       archive.shift();
       try { localStorage.setItem('groc_my_list_archive', JSON.stringify(archive)); } catch (e) { /* storage unavailable */ }
-      myList = snapshot;
+      myList = dealsSnapshot;
+      shoppingList = shoppingSnapshot;
       saveMyList();
+      saveShoppingList();
       renderMyList();
       renderDeals();
     });
   }
   document.getElementById('mylist-archive-btn').addEventListener('click', archiveMyList);
+
+  document.getElementById('mylist-add-row').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('mylist-add-input');
+    const added = addShoppingListItems(input.value);
+    input.value = '';
+    input.focus(); // ready for the next item without re-clicking, like jotting a paper list
+    if (added) { renderMyList(); renderDeals(); } // new items can newly match rows already shown on the Deals tab
+  });
 
   // ---------- Tabs ----------
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1695,6 +1898,7 @@
         // no-postal-data copy already reads as a retryable failure rather
         // than "genuinely nothing here" -- no separate error message needed.
         renderDeals();
+        renderMyList();
         return;
       }
       await startLoadingFor(code); // re-run now that fresh data has been stored (or confirmed empty)
@@ -1703,6 +1907,11 @@
 
     document.getElementById('loading-bar').classList.remove('open');
     renderDeals();
+    // Refreshes the shopping list's matched-deals view now that allResults
+    // has real data -- otherwise someone sitting on the My List tab while a
+    // search finishes wouldn't see matches appear until some other action
+    // happened to re-render it.
+    renderMyList();
   }
 
   // ---------- Ask sheet ----------
