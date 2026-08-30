@@ -295,10 +295,16 @@
 
   /* ---------- Item detail modal ---------- */
   .deal-row { cursor: pointer; }
-  #item-detail-image { width: 100%; height: 220px; background: var(--placeholder-bg); border: 1.5px solid var(--pine); background-size: cover; background-position: center; }
+  #item-detail-image {
+    width: 100%; height: 220px; background-color: var(--placeholder-bg); border: 1.5px solid var(--pine);
+    background-size: cover; background-position: center;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; color: var(--muted);
+  }
   #item-detail-top-line { display: flex; align-items: center; gap: 6px; }
-  #item-detail-name { font-size: 21px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; line-height: 1.2; }
-  #item-detail-category { font-size: 12px; font-weight: 700; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; }
+  #item-detail-name { font-size: 21px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; line-height: 1.2; overflow-wrap: anywhere; }
+  #item-detail-category { font-size: 12px; font-weight: 700; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; overflow-wrap: anywhere; }
+  #item-detail-merchant { overflow-wrap: anywhere; white-space: normal; }
   #item-detail-price-row { display: flex; align-items: baseline; gap: 10px; }
   #item-detail-price-flag { background: var(--marigold); padding: 6px 12px; display: flex; align-items: baseline; gap: 6px; }
   #item-detail-cur-price { font-size: 28px; font-weight: 800; color: var(--pine); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
@@ -1233,6 +1239,7 @@
 
     const imgEl = document.getElementById('item-detail-image');
     imgEl.style.backgroundImage = row.cutout_image_url ? "url('" + row.cutout_image_url.replace(/'/g, '%27') + "')" : 'none';
+    imgEl.textContent = row.cutout_image_url ? '' : 'No image available';
 
     document.getElementById('item-detail-mono').textContent = storeInitials(row.merchant);
     document.getElementById('item-detail-merchant').textContent = row.merchant;
