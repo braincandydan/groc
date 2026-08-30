@@ -78,17 +78,22 @@ for auth options.
 
 ## Web UI + API
 
-A deliberately bare-bones (unstyled) web UI and JSON API sit on top of the
-same search/chat layers — no design work has gone into this on purpose; it's
-meant to be a functional base for a real design pass later, not a preview of one.
+A mobile-first web UI (pine/marigold/cream, Archivo type, designed in Claude
+Design) sits on top of the same search/chat layers, plus a JSON API.
 
 ```bash
 python -m groc.cli serve --db groc.db
 ```
 
-Then open `http://127.0.0.1:5000/`. Endpoints:
+Then open `http://127.0.0.1:5000/`. It covers: onboarding (postal code entry),
+browse/filter/sort with a filter sheet (sort, category, per-store checklist),
+Ask (grounded Q&A with sources), a no-results state with suggestions, and a
+**My List** saved-items feature (persisted in the browser's `localStorage`,
+with a "which stores cover everything" suggestion).
 
-- `GET /api/search?q=<query>&postal_code=<pc>&limit=<n>&best_per_merchant=1` — same ranking as the CLI `search` command
+API endpoints, if you're building your own frontend against this:
+
+- `GET /api/search?q=<query>&postal_code=<pc>&limit=<n>&offset=<n>&best_per_merchant=1` — same ranking as the CLI `search` command; paginate with `limit`/`offset` and the response's `has_more` flag
 - `POST /api/ask` with JSON body `{"question": "...", "postal_code": "..."}` — returns `{"answer": "...", "sources": [...]}`, where `sources` are the raw flyer rows the answer was grounded in
 
 For production-style serving (not the Flask dev server), a WSGI entrypoint

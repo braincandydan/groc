@@ -186,3 +186,18 @@ def test_api_search_returns_json_error_on_unhandled_exception(app_and_db, monkey
     data = resp.get_json()
     assert data == {"error": "internal server error"}
     assert "secret_should_not_leak" not in resp.get_data(as_text=True)
+
+
+def test_favicon_returns_no_content(app_and_db):
+    client = app_and_db.test_client()
+    resp = client.get("/favicon.ico")
+    assert resp.status_code == 204
+
+
+def test_unknown_route_returns_plain_404_not_500(app_and_db):
+    # HTTPExceptions (routine 404s) shouldn't be logged/treated as crashes --
+    # this was misfiring as a 500 for every /favicon.ico request in production
+    # before the errorhandler special-cased HTTPException.
+    client = app_and_db.test_client()
+    resp = client.get("/this-route-does-not-exist")
+    assert resp.status_code == 404

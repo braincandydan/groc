@@ -2,185 +2,1005 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>groc</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap">
+<style>
+  :root {
+    --pine: #123B34;
+    --pine-pressed: #0A2620;
+    --marigold: #FFC53D;
+    --cream: #F6F2E9;
+    --cream-deep: #E8E1D0;
+    --marigold-tint: #FFF7E2;
+    --placeholder-bg: #EFE9DA;
+    --ink: #16211E;
+    --meta: #5C6B66;
+    --muted: #7C8A85;
+    --red: #D6402C;
+    --divider: #DCD3BE;
+    --input-placeholder: #9BA5A1;
+    --disabled-text: #8C8878;
+    --on-pine-text: #DCE8E4;
+    --on-pine-border: #2E5A51;
+    --on-pine-muted: #85A39B;
+    --notice-text: #6B5A2A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #ECECEC;
+    font-family: Archivo, ui-sans-serif, sans-serif;
+    display: flex;
+    justify-content: center;
+  }
+  a { color: var(--pine); }
+  a:hover { color: var(--pine-pressed); }
+  button { font-family: inherit; cursor: pointer; }
+
+  #app {
+    width: 100%;
+    max-width: 480px;
+    min-height: 100vh;
+    background: var(--cream);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* ---------- Onboarding ---------- */
+  #onboarding-header {
+    background: var(--pine);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wordmark { font-size: 21px; font-weight: 800; color: var(--cream); letter-spacing: -.035em; }
+  .wordmark .dot { color: var(--marigold); }
+
+  #onboarding-body { flex: 1; padding: 40px 24px; display: flex; flex-direction: column; gap: 24px; }
+  #onboarding-heading { font-size: 30px; font-weight: 800; color: var(--pine); letter-spacing: -.03em; line-height: 1.1; }
+  #onboarding-sub { font-size: 15px; line-height: 1.5; color: var(--meta); text-wrap: pretty; }
+  .field-group { display: flex; flex-direction: column; gap: 10px; }
+  .field-label { font-size: 11.5px; font-weight: 800; letter-spacing: .1em; color: var(--pine); }
+  #onboarding-postal {
+    height: 52px; background: #fff; border: 1.5px solid var(--pine);
+    padding: 0 14px; font-size: 18px; font-weight: 600; color: var(--ink); letter-spacing: .06em;
+    width: 100%; text-transform: uppercase;
+  }
+  #onboarding-postal::placeholder { color: var(--input-placeholder); text-transform: none; font-weight: 400; }
+  .btn-primary {
+    height: 52px; background: var(--pine); color: var(--marigold); border: none;
+    font-size: 14px; font-weight: 800; letter-spacing: .1em; display: flex; align-items: center; justify-content: center;
+  }
+  .helper-text { font-size: 12px; color: var(--muted); text-wrap: pretty; }
+  #onboarding-footer {
+    margin-top: auto; border-top: 1.5px solid var(--divider); padding-top: 16px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .footer-label { font-size: 11.5px; font-weight: 800; letter-spacing: .1em; color: var(--muted); }
+
+  /* ---------- Main app header ---------- */
+  #app-header { background: var(--pine); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+  #header-top-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #postal-chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+    border: 1px solid var(--on-pine-border); background: transparent; border-radius: 4px;
+    font-size: 12px; font-weight: 600; color: var(--on-pine-text); letter-spacing: .04em; font-variant-numeric: tabular-nums;
+  }
+  #postal-edit-row { display: none; gap: 6px; }
+  #postal-edit-row.open { display: flex; }
+  #postal-edit-input {
+    flex: 1; height: 32px; border: 1px solid var(--on-pine-border); background: #fff; padding: 0 8px;
+    font-size: 13px; font-weight: 600; color: var(--ink); text-transform: uppercase;
+  }
+  #postal-edit-save {
+    height: 32px; padding: 0 10px; background: var(--marigold); border: none; color: var(--pine);
+    font-size: 11.5px; font-weight: 800; letter-spacing: .06em;
+  }
+  #tab-switcher {
+    display: flex; border: 1px solid var(--on-pine-border);
+  }
+  .tab-btn {
+    flex: 1; padding: 8px 0; text-align: center; background: none; border: none;
+    color: var(--on-pine-text); font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  }
+  .tab-btn.active { background: var(--marigold); color: var(--pine); font-weight: 800; }
+
+  #search-row { display: flex; gap: 8px; }
+  #filter-query {
+    flex: 1; height: 44px; background: #fff; border: none; padding: 0 12px;
+    font-size: 15px; font-weight: 500; color: var(--ink);
+  }
+  #filter-query::placeholder { color: var(--input-placeholder); font-weight: 400; }
+  #ask-open-btn {
+    height: 44px; padding: 0 16px; border: none; background: var(--marigold); color: var(--pine);
+    font-size: 13px; font-weight: 800; letter-spacing: .08em;
+  }
+
+  #status-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  #status-text { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; color: var(--on-pine-muted); }
+  #best-toggle-label {
+    display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700;
+    letter-spacing: .06em; color: var(--on-pine-text); white-space: nowrap; user-select: none;
+  }
+  .switch { width: 32px; height: 18px; border-radius: 9px; background: var(--on-pine-border); padding: 2px; display: flex; flex-shrink: 0; }
+  .switch.on { background: var(--marigold); justify-content: flex-end; }
+  .switch-thumb { width: 14px; height: 14px; border-radius: 7px; background: var(--on-pine-muted); }
+  .switch.on .switch-thumb { background: var(--pine); }
+
+  /* ---------- Filter bar ---------- */
+  #filter-bar { display: flex; gap: 6px; padding: 10px 16px; background: var(--cream-deep); border-bottom: 1.5px solid var(--pine); flex-wrap: wrap; }
+  .chip {
+    height: 26px; padding: 0 10px; border: 1.5px solid var(--pine); background: none; color: var(--pine);
+    font-size: 11.5px; font-weight: 700; letter-spacing: .06em; display: flex; align-items: center; gap: 6px;
+  }
+  .chip.filled { background: var(--pine); color: var(--cream); }
+  .chip.active { background: var(--marigold); font-weight: 800; }
+
+  #best-notice { display: none; padding: 8px 16px; background: var(--marigold-tint); border-bottom: 1.5px solid var(--divider); font-size: 12px; color: var(--notice-text); }
+  #best-notice.open { display: block; }
+  #best-notice a { font-weight: 700; text-decoration: underline; }
+
+  /* ---------- Loading ---------- */
+  #loading-bar { display: none; padding: 14px 16px; background: var(--cream-deep); border-bottom: 1.5px solid var(--pine); flex-direction: column; gap: 8px; }
+  #loading-bar.open { display: flex; }
+  #loading-top-row { display: flex; align-items: baseline; justify-content: space-between; }
+  #loading-title { font-size: 13px; font-weight: 700; color: var(--pine); }
+  #loading-count { font-size: 13px; font-weight: 800; color: var(--pine); font-variant-numeric: tabular-nums; }
+  #loading-track { height: 8px; background: #D6CCB4; overflow: hidden; }
+  #loading-fill { height: 100%; background: var(--marigold); width: 30%; animation: loading-sweep 1.1s ease-in-out infinite; }
+  @keyframes loading-sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+  #loading-sub { font-size: 11.5px; color: var(--meta); }
+
+  /* ---------- Deal rows ---------- */
+  #results-list, #mylist-rows { display: flex; flex-direction: column; }
+  .deal-row { display: flex; gap: 12px; padding: 12px 16px; background: #fff; border-bottom: 1.5px solid var(--pine); align-items: center; }
+  .deal-image { width: 58px; height: 58px; flex: none; background: var(--placeholder-bg); border: 1.5px solid var(--pine); background-size: cover; background-position: center; }
+  .deal-image.small { width: 46px; height: 46px; }
+  .deal-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .deal-top-line { display: flex; align-items: center; gap: 6px; }
+  .mono-badge { width: 18px; height: 18px; flex: none; background: var(--pine); font-size: 8px; font-weight: 800; color: var(--marigold); display: flex; align-items: center; justify-content: center; }
+  .merchant-name { font-size: 11.5px; font-weight: 800; letter-spacing: .06em; color: var(--pine); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-name { font-size: 15px; font-weight: 500; line-height: 1.2; color: var(--ink); text-wrap: pretty; }
+  .deal-bottom-line { display: flex; align-items: center; gap: 8px; }
+  .valid-label { font-size: 11px; color: var(--muted); letter-spacing: .03em; }
+  .ends-today-tag { padding: 1px 6px; background: var(--red); font-size: 10px; font-weight: 800; letter-spacing: .07em; color: #fff; }
+  .deal-right { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+  .price-flag { background: var(--marigold); padding: 3px 8px; display: flex; align-items: baseline; gap: 4px; }
+  .was-price { font-size: 11.5px; color: #8A6712; text-decoration: line-through; }
+  .cur-price { font-size: 21px; font-weight: 800; color: var(--pine); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .price-suffix { font-size: 11px; font-weight: 600; color: var(--meta); }
+  .list-btn { margin-top: 2px; height: 24px; padding: 0 8px; border: 1.5px solid var(--pine); background: none; font-size: 11px; font-weight: 800; letter-spacing: .06em; color: var(--pine); }
+  .list-btn.listed { background: var(--marigold); }
+  .remove-btn { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); background: none; border: none; padding: 0; }
+
+  #no-results { display: none; padding: 32px 24px; flex-direction: column; gap: 18px; }
+  #no-results.open { display: flex; }
+  .no-results-heading { font-size: 20px; font-weight: 800; color: var(--pine); letter-spacing: -.02em; }
+  .no-results-body { font-size: 14.5px; line-height: 1.5; color: var(--meta); text-wrap: pretty; }
+  #try-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .try-chip { height: 30px; padding: 0 11px; border: 1.5px solid var(--pine); background: none; font-size: 12.5px; font-weight: 700; color: var(--pine); }
+  #drop-filters-card { border: 1.5px solid var(--pine); background: var(--marigold-tint); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  #drop-filters-heading { font-size: 14px; font-weight: 700; color: var(--pine); }
+  #drop-filters-body { font-size: 13px; color: var(--meta); }
+  #clear-filters-btn { height: 38px; background: var(--pine); color: var(--marigold); border: none; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; }
+  #no-results-footer { border-top: 1.5px solid var(--divider); padding-top: 14px; font-size: 13.5px; color: var(--meta); text-wrap: pretty; }
+  #no-results-footer a { font-weight: 700; text-decoration: underline; }
+
+  /* ---------- My List ---------- */
+  #mylist-view { display: none; flex-direction: column; }
+  #mylist-view.open { display: flex; }
+  #mylist-summary { padding: 12px 16px; background: var(--cream-deep); border-bottom: 1.5px solid var(--pine); display: flex; align-items: baseline; justify-content: space-between; }
+  #mylist-count { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--pine); }
+  #mylist-total-row { display: flex; align-items: baseline; gap: 6px; }
+  #mylist-total-label { font-size: 11.5px; font-weight: 700; color: var(--meta); }
+  #mylist-total { font-size: 19px; font-weight: 800; color: var(--pine); font-variant-numeric: tabular-nums; }
+  #mylist-empty { padding: 32px 24px; font-size: 14.5px; color: var(--meta); text-align: center; }
+  #mylist-footer { display: none; padding: 14px 16px; background: var(--marigold-tint); border-top: 1.5px solid var(--pine); flex-direction: column; gap: 8px; }
+  #mylist-footer.open { display: flex; }
+  #mylist-suggestion { font-size: 13px; color: var(--notice-text); text-wrap: pretty; }
+  #group-by-store-btn { height: 42px; background: var(--pine); color: var(--marigold); border: none; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; }
+
+  /* ---------- Sheets ---------- */
+  .sheet-overlay {
+    display: none; position: fixed; inset: 0; z-index: 10;
+    max-width: 480px; margin: 0 auto; align-items: flex-end;
+  }
+  .sheet-overlay.open { display: flex; }
+  .sheet-scrim { position: absolute; inset: 0; background: var(--pine); opacity: .42; }
+  .sheet { position: relative; width: 100%; background: #fff; border-top: 2px solid var(--pine); max-height: 82vh; display: flex; flex-direction: column; }
+  .sheet-header { background: var(--marigold); border-bottom: 1.5px solid var(--pine); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex: none; }
+  .sheet-title { font-size: 12.5px; font-weight: 800; letter-spacing: .1em; color: var(--pine); }
+  .sheet-close { font-size: 12.5px; font-weight: 800; letter-spacing: .07em; color: var(--pine); background: none; border: none; }
+  .sheet-body { padding: 16px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+
+  .segmented { display: flex; border: 1.5px solid var(--pine); }
+  .segment { flex: 1; padding: 9px 0; text-align: center; background: none; border: none; border-left: 1.5px solid var(--pine); color: var(--pine); font-size: 12px; font-weight: 700; letter-spacing: .05em; }
+  .segment:first-child { border-left: none; }
+  .segment.active { background: var(--pine); color: var(--cream); font-weight: 800; }
+
+  #category-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .category-chip { height: 30px; padding: 0 11px; border: 1.5px solid var(--pine); background: none; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--pine); display: flex; align-items: center; gap: 6px; }
+  .category-chip.selected { background: var(--marigold); font-weight: 800; }
+
+  #store-list { border: 1.5px solid var(--pine); }
+  .store-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--divider); }
+  .store-row:last-child { border-bottom: none; }
+  .store-checkbox { width: 18px; height: 18px; flex: none; border: 1.5px solid var(--pine); background: #fff; font-size: 11px; font-weight: 800; color: var(--pine); display: flex; align-items: center; justify-content: center; }
+  .store-checkbox.checked { background: var(--marigold); }
+  .store-name { flex: 1; font-size: 14px; font-weight: 500; color: var(--ink); }
+  .store-count { font-size: 11.5px; font-weight: 700; color: var(--meta); font-variant-numeric: tabular-nums; }
+  .select-all-link { font-size: 11.5px; font-weight: 700; color: var(--pine); text-decoration: underline; background: none; border: none; }
+
+  /* ---------- Ask sheet ---------- */
+  #ask-input-row { display: flex; gap: 8px; }
+  #ask-question {
+    flex: 1; min-height: 44px; background: var(--cream); border: 1.5px solid var(--pine); padding: 11px 12px;
+    font-size: 14.5px; font-weight: 500; color: var(--ink); line-height: 1.3;
+  }
+  #ask-question::placeholder { color: var(--input-placeholder); font-weight: 400; }
+  #ask-send { height: 44px; padding: 0 14px; border: none; background: var(--pine); color: var(--marigold); font-size: 12.5px; font-weight: 800; letter-spacing: .07em; flex: none; align-self: flex-start; }
+  #ask-send:disabled { background: var(--divider); color: var(--disabled-text); }
+  #ask-prompts-section, #ask-thinking-section, #ask-answer-section { display: none; flex-direction: column; gap: 10px; }
+  #ask-prompts-section.open, #ask-thinking-section.open, #ask-answer-section.open { display: flex; }
+  .ask-prompt { border: 1.5px solid var(--pine); padding: 10px 12px; font-size: 14px; font-weight: 500; color: var(--ink); background: #fff; text-align: left; }
+  #ask-thinking-dots { display: flex; align-items: center; gap: 10px; }
+  .dot-row { display: flex; gap: 4px; }
+  .think-dot { width: 8px; height: 8px; }
+  .think-dot:nth-child(1) { background: var(--pine); }
+  .think-dot:nth-child(2) { background: var(--marigold); }
+  .think-dot:nth-child(3) { background: var(--divider); }
+  #ask-thinking-text { font-size: 13.5px; color: var(--meta); }
+  .skeleton-line { height: 11px; background: var(--placeholder-bg); }
+  #ask-answer-text { font-size: 14.5px; line-height: 1.55; color: var(--ink); text-wrap: pretty; }
+  #ask-grounded-row { display: flex; align-items: center; justify-content: space-between; }
+  #ask-grounded-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--muted); }
+  #ask-open-search-link { font-size: 11.5px; font-weight: 700; color: var(--pine); text-decoration: underline; background: none; border: none; }
+  #ask-sources { border: 1.5px solid var(--pine); }
+  .ask-source-row { display: flex; gap: 10px; padding: 10px; border-bottom: 1px solid var(--pine); align-items: center; }
+  .ask-source-row:last-child { border-bottom: none; }
+  .ask-source-image { width: 38px; height: 38px; flex: none; background: var(--placeholder-bg); border: 1px solid var(--pine); background-size: cover; background-position: center; }
+  .ask-source-mid { flex: 1; min-width: 0; }
+  .ask-source-item { font-size: 13.5px; font-weight: 500; color: var(--ink); line-height: 1.2; }
+  .ask-source-meta { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--meta); text-transform: uppercase; }
+  .ask-source-price-col { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .ask-source-price { background: var(--marigold); padding: 2px 7px; font-size: 15px; font-weight: 800; color: var(--pine); font-variant-numeric: tabular-nums; }
+  .ask-source-suffix { font-size: 10.5px; color: var(--meta); }
+  #ask-disclaimer { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
+</style>
 </head>
 <body>
-<h1>groc</h1>
+<div id="app">
 
-<h2>Search</h2>
-<form id="load-form">
-  <label>Postal code: <input id="postal-code" type="text" placeholder="e.g. M5V2H1"></label>
-  <button type="submit">Search</button>
-</form>
-<p>
-  <input id="filter-query" type="text" placeholder="filter results, e.g. chicken breast" disabled>
-  <label><input id="best-per-merchant" type="checkbox" disabled> cheapest per store only</label>
-</p>
-<p id="search-status"></p>
-<table id="search-results" border="1" cellpadding="4">
-  <thead>
-    <tr><th>Store</th><th>Image</th><th>Item</th><th>Category</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
+  <!-- ============ Onboarding (first run) ============ -->
+  <section id="onboarding">
+    <div id="onboarding-header"><div class="wordmark">groc<span class="dot">.</span></div></div>
+    <div id="onboarding-body">
+      <div class="field-group" style="gap: 10px">
+        <div id="onboarding-heading">Every flyer deal near you, in one list.</div>
+        <div id="onboarding-sub">Enter your postal code. groc loads this week's deals from every grocery and pharmacy flyer in your area so you can search them all at once.</div>
+      </div>
+      <form id="onboarding-form" class="field-group">
+        <div class="field-label">POSTAL CODE</div>
+        <input id="onboarding-postal" placeholder="e.g. M5V 2H1" autocomplete="off">
+        <button type="submit" class="btn-primary">LOAD DEALS</button>
+        <div class="helper-text">Saved on this device. Change it any time from the header.</div>
+      </form>
+      <div id="onboarding-footer">
+        <div class="footer-label">HOW THIS WORKS</div>
+        <div class="helper-text">Prices come straight from this week's flyers — no estimates, no guessing.</div>
+      </div>
+    </div>
+  </section>
 
-<h2>Ask</h2>
-<form id="ask-form">
-  <input id="ask-question" type="text" placeholder="e.g. what's the best deal on chicken breast" size="60">
-  <button type="submit">Ask</button>
-</form>
-<p id="ask-answer"></p>
-<table id="ask-sources" border="1" cellpadding="4">
-  <thead>
-    <tr><th>Store</th><th>Image</th><th>Item</th><th>Category</th><th>Was</th><th>Price</th><th>Saved</th><th>Valid to</th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
+  <!-- ============ Main app ============ -->
+  <div id="main-app" style="display: none; flex-direction: column; flex: 1">
+    <header id="app-header">
+      <div id="header-top-row">
+        <div class="wordmark">groc<span class="dot">.</span></div>
+        <button id="postal-chip" type="button"></button>
+      </div>
+      <form id="postal-edit-row">
+        <input id="postal-edit-input" autocomplete="off">
+        <button type="submit" id="postal-edit-save">LOAD</button>
+      </form>
+      <div id="tab-switcher">
+        <button type="button" class="tab-btn active" data-tab="deals">DEALS</button>
+        <button type="button" class="tab-btn" data-tab="mylist" id="mylist-tab-btn">MY LIST</button>
+      </div>
+      <div id="search-row">
+        <input id="filter-query" placeholder="Filter these deals, e.g. chicken breast">
+        <button id="ask-open-btn" type="button">ASK</button>
+      </div>
+      <div id="status-row">
+        <div id="status-text"></div>
+        <label id="best-toggle-label">CHEAPEST/STORE
+          <input type="checkbox" id="best-per-merchant" style="display: none">
+          <div class="switch" id="best-switch"><div class="switch-thumb"></div></div>
+        </label>
+      </div>
+    </header>
 
+    <!-- Deals tab -->
+    <div id="deals-view">
+      <div id="filter-bar">
+        <button class="chip filled" id="sort-chip" type="button">PRICE ↑</button>
+        <button class="chip" id="category-chip" type="button">ALL CATEGORIES</button>
+        <button class="chip" id="stores-chip" type="button">ALL STORES</button>
+      </div>
+      <div id="best-notice">Showing one cheapest match per store. <a href="#" id="show-all-link">Show all <span id="show-all-count"></span></a></div>
+      <div id="loading-bar">
+        <div id="loading-top-row">
+          <div id="loading-title"></div>
+          <div id="loading-count"></div>
+        </div>
+        <div id="loading-track"><div id="loading-fill"></div></div>
+        <div id="loading-sub">You can start filtering as soon as it finishes.</div>
+      </div>
+      <div id="results-list"></div>
+      <div id="no-results">
+        <div class="field-group" style="gap: 8px">
+          <div class="no-results-heading">No flyer items match that.</div>
+          <div class="no-results-body">Filtering matches the item name exactly as the store wrote it — a word you typed might just not be in the name.</div>
+        </div>
+        <div class="field-group" style="gap: 8px">
+          <div class="footer-label">TRY</div>
+          <div id="try-chips"></div>
+        </div>
+        <div id="drop-filters-card">
+          <div id="drop-filters-heading">Or drop the filters</div>
+          <div id="drop-filters-body"></div>
+          <button id="clear-filters-btn" type="button">CLEAR ALL FILTERS</button>
+        </div>
+        <div id="no-results-footer">Not sure what it's called? <a href="#" id="ask-instead-link">Ask groc instead</a> — plain language works there.</div>
+      </div>
+    </div>
+
+    <!-- My List tab -->
+    <div id="mylist-view">
+      <div id="mylist-summary">
+        <div id="mylist-count"></div>
+        <div id="mylist-total-row"><span id="mylist-total-label">TOTAL</span><span id="mylist-total"></span></div>
+      </div>
+      <div id="mylist-empty">Nothing on your list yet. Add items from Deals with <strong>+ LIST</strong>.</div>
+      <div id="mylist-rows"></div>
+      <div id="mylist-footer">
+        <div id="mylist-suggestion"></div>
+        <button id="group-by-store-btn" type="button">GROUP BY STORE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Filter sheet ============ -->
+  <div class="sheet-overlay" id="filter-sheet-overlay">
+    <div class="sheet-scrim"></div>
+    <div class="sheet">
+      <div class="sheet-header">
+        <div class="sheet-title">FILTER &amp; SORT</div>
+        <button class="sheet-close" id="filter-sheet-done" type="button">DONE</button>
+      </div>
+      <div class="sheet-body">
+        <div class="field-group" style="gap: 8px">
+          <div class="footer-label">SORT BY</div>
+          <div class="segmented">
+            <button class="segment active" data-sort="price" type="button">PRICE</button>
+            <button class="segment" data-sort="store" type="button">STORE</button>
+            <button class="segment" data-sort="expiring" type="button">EXPIRING</button>
+          </div>
+        </div>
+        <div class="field-group" style="gap: 8px">
+          <div class="footer-label">CATEGORY</div>
+          <div id="category-chips"></div>
+        </div>
+        <div class="field-group" style="gap: 8px">
+          <div style="display: flex; align-items: baseline; justify-content: space-between">
+            <div class="footer-label">STORES</div>
+            <button class="select-all-link" id="select-all-stores" type="button">Select all</button>
+          </div>
+          <div id="store-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Ask sheet ============ -->
+  <div class="sheet-overlay" id="ask-sheet-overlay">
+    <div class="sheet-scrim"></div>
+    <div class="sheet">
+      <div class="sheet-header">
+        <div class="sheet-title">ASK GROC</div>
+        <button class="sheet-close" id="ask-sheet-close" type="button">CLOSE ✕</button>
+      </div>
+      <div class="sheet-body">
+        <form id="ask-input-row">
+          <input id="ask-question" placeholder="Ask about this week's deals…" autocomplete="off">
+          <button id="ask-send" type="submit" disabled>SEND</button>
+        </form>
+        <div id="ask-prompts-section">
+          <div class="footer-label">TRY ASKING</div>
+          <button class="ask-prompt" type="button">what's the best deal on chicken breast?</button>
+          <button class="ask-prompt" type="button">cheapest place to buy coffee this week</button>
+          <button class="ask-prompt" type="button">what should I buy to keep dinner under $20?</button>
+          <button class="ask-prompt" type="button">any deals on produce ending today?</button>
+        </div>
+        <div id="ask-thinking-section">
+          <div class="footer-label">WHILE IT ANSWERS</div>
+          <div id="ask-thinking-dots">
+            <div class="dot-row"><div class="think-dot"></div><div class="think-dot"></div><div class="think-dot"></div></div>
+            <div id="ask-thinking-text">Thinking…</div>
+          </div>
+          <div class="field-group" style="gap: 6px">
+            <div class="skeleton-line" style="width: 92%"></div>
+            <div class="skeleton-line" style="width: 74%"></div>
+            <div class="skeleton-line" style="width: 46%"></div>
+          </div>
+        </div>
+        <div id="ask-answer-section">
+          <div id="ask-answer-text"></div>
+          <div id="ask-grounded-row">
+            <div id="ask-grounded-label"></div>
+            <button id="ask-open-search-link" type="button">Open in search</button>
+          </div>
+          <div id="ask-sources"></div>
+          <div id="ask-disclaimer">Answers only use the flyer rows above. If nothing matches, groc says so instead of guessing.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
 <script>
-console.log('[groc] script loaded');
+(function () {
+  const PAGE_SIZE = 500;
+  const MAX_PAGES = 50; // safety cap: 25,000 rows, well beyond any real postal code
+  const STOPWORDS = new Set(["a","an","the","is","are","was","were","what","whats","where","which","who","when",
+    "how","best","good","cheap","cheapest","deal","deals","on","for","to","of","in","at","buy","should","i","me",
+    "my","can","you","please","find","get","some","any","this","that","week","store","stores","and","or","with",
+    "save","money","budget","suggest","recommend","meal","meals","using","stuff","sale","sales","shopping","list",
+    "recipe","recipes","cook","dinner"]);
 
-let allResults = [];
+  let allResults = [];
+  let postalCode = localStorage.getItem('groc_postal_code') || '';
+  let selectedCategories = new Set();
+  let deselectedStores = new Set();
+  let sortMode = 'price';
+  let currentTab = 'deals';
+  let myList = loadMyList();
+  let lastQuestion = '';
 
-function renderRows(tbodyId, rows) {
-  console.log('[groc] renderRows', tbodyId, rows.length, 'rows');
-  const tbody = document.querySelector('#' + tbodyId + ' tbody');
-  tbody.innerHTML = '';
-  for (const row of rows) {
-    const price = row.unit_price != null ? row.unit_price : row.price;
-    const priceText = price != null ? '$' + Number(price).toFixed(2) : 'n/a';
-    const wasText = row.was_price != null ? '$' + Number(row.was_price).toFixed(2) : '';
-    let savedText = '';
-    if (row.was_price != null && price != null && row.was_price > price) {
-      savedText = '$' + (row.was_price - price).toFixed(2);
-    }
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = '<td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>';
-    tr.children[0].textContent = row.merchant;
-
-    if (row.cutout_image_url) {
-      const img = document.createElement('img');
-      img.src = row.cutout_image_url;
-      img.alt = row.item_name;
-      img.style.height = '50px';
-      tr.children[1].appendChild(img);
-    }
-
-    tr.children[2].textContent = row.item_name;
-    tr.children[3].textContent = row.category || '';
-    tr.children[4].textContent = wasText;
-    tr.children[5].textContent = priceText;
-    tr.children[6].textContent = savedText;
-    tr.children[7].textContent = row.valid_to || '';
-    tbody.appendChild(tr);
+  function loadMyList() {
+    try { return JSON.parse(localStorage.getItem('groc_my_list') || '[]'); } catch (e) { return []; }
   }
-}
-
-function applyFilterAndRender() {
-  const terms = document.getElementById('filter-query').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  console.log('[groc] applyFilterAndRender terms=', terms, 'allResults.length=', allResults.length);
-  let rows = allResults;
-  if (terms.length) {
-    rows = rows.filter(row => terms.every(t => row.item_name.toLowerCase().includes(t)));
+  function saveMyList() {
+    try { localStorage.setItem('groc_my_list', JSON.stringify(myList)); } catch (e) { /* storage unavailable */ }
   }
-  if (document.getElementById('best-per-merchant').checked) {
+  function isListed(row) { return myList.some(r => r.id === row.id); }
+  function toggleListed(row) {
+    if (isListed(row)) { myList = myList.filter(r => r.id !== row.id); }
+    else { myList.push(row); }
+    saveMyList();
+  }
+
+  function storeInitials(name) {
+    const words = name.trim().split(/\s+/);
+    if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+    return name.slice(0, 2).toUpperCase();
+  }
+  function effectivePrice(row) { return row.unit_price != null ? row.unit_price : row.price; }
+  function priceText(row) {
+    const p = effectivePrice(row);
+    return p != null ? '$' + Number(p).toFixed(2) : 'n/a';
+  }
+  function priceSuffixText(row) {
+    return row.unit_price != null && row.unit_label ? '$' + Number(row.unit_price).toFixed(2) + ' / ' + row.unit_label : '';
+  }
+  function isExpiring(row) {
+    if (!row.valid_to) return false;
+    const diff = new Date(row.valid_to) - new Date();
+    return diff >= 0 && diff < 24 * 60 * 60 * 1000;
+  }
+  function categoriesOf(row) {
+    return (row.category || '').split(',').map(c => c.trim()).filter(Boolean);
+  }
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s == null ? '' : String(s);
+    return d.innerHTML;
+  }
+
+  // ---------- Deal row rendering ----------
+  function dealRowHtml(row, opts) {
+    opts = opts || {};
+    const p = effectivePrice(row);
+    const suffix = priceSuffixText(row);
+    const listed = isListed(row);
+    const bgStyle = row.cutout_image_url ? ' style="background-image: url(\'' + row.cutout_image_url.replace(/'/g, "%27") + '\')"' : '';
+    return (
+      '<div class="deal-row" data-id="' + row.id + '">' +
+        '<div class="deal-image' + (opts.small ? ' small' : '') + '"' + bgStyle + '></div>' +
+        '<div class="deal-mid">' +
+          '<div class="deal-top-line">' +
+            '<div class="mono-badge">' + escapeHtml(storeInitials(row.merchant)) + '</div>' +
+            '<div class="merchant-name">' + escapeHtml(row.merchant) + '</div>' +
+          '</div>' +
+          '<div class="item-name">' + escapeHtml(row.item_name) + '</div>' +
+          '<div class="deal-bottom-line">' +
+            '<div class="valid-label">' + (row.valid_to ? 'to ' + escapeHtml(row.valid_to.slice(0, 10)) : '') + '</div>' +
+            (isExpiring(row) ? '<div class="ends-today-tag">ENDS TODAY</div>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="deal-right">' +
+          '<div class="price-flag">' +
+            (row.was_price != null ? '<span class="was-price">$' + Number(row.was_price).toFixed(2) + '</span>' : '') +
+            '<span class="cur-price">' + priceText(row) + '</span>' +
+          '</div>' +
+          (suffix ? '<div class="price-suffix">' + escapeHtml(suffix) + '</div>' : '') +
+          (opts.remove
+            ? '<button class="remove-btn" data-action="remove" data-id="' + row.id + '">REMOVE</button>'
+            : '<button class="list-btn' + (listed ? ' listed' : '') + '" data-action="list" data-id="' + row.id + '">' + (listed ? '✓ LISTED' : '+ LIST') + '</button>') +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function attachRowHandlers(container) {
+    container.querySelectorAll('[data-action="list"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const row = allResults.find(r => String(r.id) === btn.dataset.id);
+        if (row) { toggleListed(row); renderDeals(); renderMyList(); }
+      });
+    });
+    container.querySelectorAll('[data-action="remove"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        myList = myList.filter(r => String(r.id) !== btn.dataset.id);
+        saveMyList();
+        renderMyList();
+        renderDeals();
+      });
+    });
+  }
+
+  // ---------- Filtering / sorting ----------
+  function matchingRows() {
+    const terms = document.getElementById('filter-query').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    let rows = allResults;
+    if (terms.length) {
+      rows = rows.filter(row => terms.every(t => row.item_name.toLowerCase().includes(t)));
+    }
+    if (selectedCategories.size) {
+      rows = rows.filter(row => categoriesOf(row).some(c => selectedCategories.has(c)));
+    }
+    if (deselectedStores.size) {
+      rows = rows.filter(row => !deselectedStores.has(row.merchant));
+    }
+    return rows;
+  }
+
+  function sortRows(rows) {
+    const copy = rows.slice();
+    if (sortMode === 'store') {
+      copy.sort((a, b) => a.merchant.localeCompare(b.merchant));
+    } else if (sortMode === 'expiring') {
+      copy.sort((a, b) => new Date(a.valid_to || 0) - new Date(b.valid_to || 0));
+    }
+    // 'price' is the server's default order for allResults; re-filtering preserves it.
+    return copy;
+  }
+
+  function bestPerMerchant(rows) {
     const seen = new Set();
-    rows = rows.filter(row => {
+    return rows.filter(row => {
       if (seen.has(row.merchant)) return false;
       seen.add(row.merchant);
       return true;
     });
   }
-  console.log('[groc] filtered down to', rows.length, 'rows');
-  renderRows('search-results', rows);
-}
 
-const loadForm = document.getElementById('load-form');
-console.log('[groc] load-form element:', loadForm);
+  function renderDeals() {
+    const matched = matchingRows();
+    const sorted = sortRows(matched);
+    const bestOn = document.getElementById('best-per-merchant').checked;
+    const shown = bestOn ? bestPerMerchant(sorted) : sorted;
 
-loadForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  console.log('[groc] load-form submit fired');
-  const postalCode = document.getElementById('postal-code').value.trim();
-  console.log('[groc] postalCode =', JSON.stringify(postalCode));
-  if (!postalCode) {
-    console.log('[groc] no postal code entered, aborting');
-    return;
-  }
+    const listEl = document.getElementById('results-list');
+    const noResultsEl = document.getElementById('no-results');
+    const bestNoticeEl = document.getElementById('best-notice');
 
-  const statusEl = document.getElementById('search-status');
-  const PAGE_SIZE = 500;
-  const MAX_PAGES = 50; // safety cap: 25,000 rows, well beyond any real postal code
-
-  allResults = [];
-  document.getElementById('filter-query').disabled = true;
-  document.getElementById('best-per-merchant').disabled = true;
-
-  try {
-    let offset = 0;
-    for (let page = 0; page < MAX_PAGES; page++) {
-      statusEl.textContent = 'Loading... (' + allResults.length + ' items so far)';
-      const params = new URLSearchParams({ postal_code: postalCode, limit: PAGE_SIZE, offset });
-      const url = '/api/search?' + params.toString();
-      console.log('[groc] fetching page', page, url);
-
-      const res = await fetch(url);
-      const data = await res.json();
-      console.log('[groc] page', page, 'response status', res.status, 'json', data);
-
-      if (!res.ok) {
-        statusEl.textContent = 'Error: ' + (data.error || res.status);
-        console.error('[groc] search request failed', data);
-        return;
-      }
-
-      const pageResults = data.results || [];
-      allResults = allResults.concat(pageResults);
-      if (!data.has_more) break;
-      offset += PAGE_SIZE;
+    if (matched.length === 0 && allResults.length > 0) {
+      listEl.innerHTML = '';
+      noResultsEl.classList.add('open');
+      renderNoResults();
+    } else {
+      noResultsEl.classList.remove('open');
+      listEl.innerHTML = shown.map(r => dealRowHtml(r)).join('');
+      attachRowHandlers(listEl);
     }
 
-    console.log('[groc] allResults set, length =', allResults.length);
+    if (bestOn && matched.length > shown.length) {
+      bestNoticeEl.classList.add('open');
+      document.getElementById('show-all-count').textContent = matched.length;
+    } else {
+      bestNoticeEl.classList.remove('open');
+    }
 
-    document.getElementById('filter-query').disabled = false;
-    document.getElementById('best-per-merchant').disabled = false;
-    statusEl.textContent = allResults.length + ' items loaded for ' + postalCode + '. Type below to filter.';
-    applyFilterAndRender();
-  } catch (err) {
-    console.error('[groc] fetch threw', err);
-    statusEl.textContent = 'Error: ' + err;
+    updateFilterBarLabels(matched.length);
+    updateStatusText(shown.length, matched.length);
   }
-});
 
-document.getElementById('filter-query').addEventListener('input', applyFilterAndRender);
-document.getElementById('best-per-merchant').addEventListener('change', applyFilterAndRender);
+  function updateFilterBarLabels(matchCount) {
+    document.getElementById('category-chip').textContent =
+      selectedCategories.size ? Array.from(selectedCategories).join(', ').toUpperCase() + ' ✕' : 'ALL CATEGORIES';
+    document.getElementById('category-chip').classList.toggle('active', selectedCategories.size > 0);
 
-document.getElementById('ask-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  console.log('[groc] ask-form submit fired');
-  const question = document.getElementById('ask-question').value.trim();
-  if (!question) return;
-  document.getElementById('ask-answer').textContent = 'Thinking...';
-  try {
-    const res = await fetch('/api/ask', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        question,
-        postal_code: document.getElementById('postal-code').value.trim() || null,
-      }),
+    const storeSet = new Set(allResults.map(r => r.merchant));
+    const activeStoreCount = storeSet.size - deselectedStores.size;
+    document.getElementById('stores-chip').textContent =
+      deselectedStores.size ? activeStoreCount + ' STORES ✕' : (storeSet.size ? storeSet.size + ' STORES' : 'ALL STORES');
+    document.getElementById('stores-chip').classList.toggle('active', deselectedStores.size > 0);
+
+    const sortLabels = { price: 'PRICE ↑', store: 'STORE A–Z', expiring: 'EXPIRING SOON' };
+    document.getElementById('sort-chip').textContent = sortLabels[sortMode];
+  }
+
+  function updateStatusText(shownCount, matchCount) {
+    const q = document.getElementById('filter-query').value.trim();
+    const total = allResults.length;
+    const storeCount = new Set(allResults.map(r => r.merchant)).size;
+    if (q || selectedCategories.size || deselectedStores.size) {
+      document.getElementById('status-text').textContent = matchCount + ' MATCHES · ' + shownCount + ' SHOWN';
+    } else {
+      document.getElementById('status-text').textContent = total.toLocaleString() + ' DEALS · ' + storeCount + ' STORES';
+    }
+  }
+
+  function renderNoResults() {
+    const q = document.getElementById('filter-query').value.trim();
+    const words = q.split(/\s+/).filter(Boolean);
+    const suggestions = [];
+    if (words.length > 1) {
+      suggestions.push(words.slice(0, -1).join(' '));
+      suggestions.push(words[0]);
+      const last = words[words.length - 1];
+      if (last !== words[0]) suggestions.push(last);
+    }
+    const chipsEl = document.getElementById('try-chips');
+    chipsEl.innerHTML = suggestions.map(s => '<button class="try-chip" type="button">' + escapeHtml(s) + '</button>').join('');
+    chipsEl.querySelectorAll('.try-chip').forEach((btn, i) => {
+      btn.addEventListener('click', () => {
+        document.getElementById('filter-query').value = suggestions[i];
+        renderDeals();
+      });
     });
-    console.log('[groc] ask response status', res.status);
-    const data = await res.json();
-    console.log('[groc] ask response json', data);
-    document.getElementById('ask-answer').textContent = data.answer || data.error || '';
-    renderRows('ask-sources', data.sources || []);
-  } catch (err) {
-    console.error('[groc] ask fetch threw', err);
-    document.getElementById('ask-answer').textContent = 'Error: ' + err;
+
+    const filterCount = (selectedCategories.size ? 1 : 0) + (deselectedStores.size ? 1 : 0) + (document.getElementById('best-per-merchant').checked ? 1 : 0);
+    document.getElementById('drop-filters-body').textContent = filterCount
+      ? 'Active filters are narrowing this down — clearing them shows every match for your search.'
+      : 'Nothing is filtered right now — try a shorter or different search term.';
   }
-});
+
+  document.getElementById('clear-filters-btn').addEventListener('click', () => {
+    selectedCategories.clear();
+    deselectedStores.clear();
+    document.getElementById('best-per-merchant').checked = false;
+    updateBestSwitch();
+    renderDeals();
+  });
+  document.getElementById('ask-instead-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    const q = document.getElementById('filter-query').value.trim();
+    openAskSheet();
+    if (q) document.getElementById('ask-question').value = "what's the best deal on " + q + '?';
+  });
+  document.getElementById('show-all-link').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('best-per-merchant').checked = false;
+    updateBestSwitch();
+    renderDeals();
+  });
+
+  // ---------- Filter sheet ----------
+  function buildFilterSheetContents() {
+    const categories = new Set();
+    allResults.forEach(r => categoriesOf(r).forEach(c => categories.add(c)));
+    const catEl = document.getElementById('category-chips');
+    catEl.innerHTML = Array.from(categories).sort().map(c =>
+      '<button class="category-chip' + (selectedCategories.has(c) ? ' selected' : '') + '" data-category="' + escapeHtml(c) + '" type="button">' +
+        escapeHtml(c) + (selectedCategories.has(c) ? ' ✓' : '') + '</button>'
+    ).join('');
+    catEl.querySelectorAll('.category-chip').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const c = btn.dataset.category;
+        if (selectedCategories.has(c)) selectedCategories.delete(c); else selectedCategories.add(c);
+        buildFilterSheetContents();
+        renderDeals();
+      });
+    });
+
+    const counts = {};
+    allResults.forEach(r => { counts[r.merchant] = (counts[r.merchant] || 0) + 1; });
+    const stores = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const storeListEl = document.getElementById('store-list');
+    storeListEl.innerHTML = stores.map(s => {
+      const checked = !deselectedStores.has(s);
+      return (
+        '<div class="store-row">' +
+          '<button class="store-checkbox' + (checked ? ' checked' : '') + '" data-store="' + escapeHtml(s) + '" type="button">' + (checked ? '✓' : '') + '</button>' +
+          '<div class="mono-badge">' + escapeHtml(storeInitials(s)) + '</div>' +
+          '<div class="store-name">' + escapeHtml(s) + '</div>' +
+          '<div class="store-count">' + counts[s] + '</div>' +
+        '</div>'
+      );
+    }).join('');
+    storeListEl.querySelectorAll('.store-checkbox').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = btn.dataset.store;
+        if (deselectedStores.has(s)) deselectedStores.delete(s); else deselectedStores.add(s);
+        buildFilterSheetContents();
+        renderDeals();
+      });
+    });
+  }
+  document.getElementById('select-all-stores').addEventListener('click', () => {
+    deselectedStores.clear();
+    buildFilterSheetContents();
+    renderDeals();
+  });
+  document.querySelectorAll('.segment').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sortMode = btn.dataset.sort;
+      document.querySelectorAll('.segment').forEach(b => b.classList.toggle('active', b === btn));
+      renderDeals();
+    });
+  });
+  function openFilterSheet() { buildFilterSheetContents(); document.getElementById('filter-sheet-overlay').classList.add('open'); }
+  function closeFilterSheet() { document.getElementById('filter-sheet-overlay').classList.remove('open'); }
+  document.getElementById('category-chip').addEventListener('click', openFilterSheet);
+  document.getElementById('stores-chip').addEventListener('click', openFilterSheet);
+  document.getElementById('sort-chip').addEventListener('click', openFilterSheet);
+  document.getElementById('filter-sheet-done').addEventListener('click', closeFilterSheet);
+  document.querySelector('#filter-sheet-overlay .sheet-scrim').addEventListener('click', closeFilterSheet);
+
+  // ---------- My List ----------
+  function greedyStoreCover(items) {
+    const remaining = new Set(items.map(i => i.id));
+    const byStore = {};
+    items.forEach(i => { (byStore[i.merchant] = byStore[i.merchant] || []).push(i.id); });
+    const chosen = [];
+    while (remaining.size) {
+      let best = null, bestCount = -1;
+      for (const [store, ids] of Object.entries(byStore)) {
+        const count = ids.filter(id => remaining.has(id)).length;
+        if (count > bestCount) { best = store; bestCount = count; }
+      }
+      if (!best) break;
+      chosen.push({ store: best, count: bestCount });
+      byStore[best].forEach(id => remaining.delete(id));
+    }
+    return chosen;
+  }
+
+  function renderMyList() {
+    const count = myList.length;
+    document.getElementById('mylist-tab-btn').textContent = 'MY LIST' + (count ? ' · ' + count : '');
+    document.getElementById('mylist-empty').style.display = count ? 'none' : 'block';
+    document.getElementById('mylist-summary').style.display = count ? 'flex' : 'none';
+
+    const rowsEl = document.getElementById('mylist-rows');
+    rowsEl.innerHTML = myList.map(r => dealRowHtml(r, { small: true, remove: true })).join('');
+    attachRowHandlers(rowsEl);
+
+    const storeCount = new Set(myList.map(r => r.merchant)).size;
+    document.getElementById('mylist-count').textContent = count + ' ITEM' + (count === 1 ? '' : 'S') + ' · ' + storeCount + ' STORE' + (storeCount === 1 ? '' : 'S');
+    const total = myList.reduce((sum, r) => sum + (r.price || 0), 0);
+    document.getElementById('mylist-total').textContent = '$' + total.toFixed(2);
+
+    const footerEl = document.getElementById('mylist-footer');
+    if (count >= 2 && storeCount >= 2) {
+      const cover = greedyStoreCover(myList);
+      const parts = cover.map(c => c.store + ' (' + c.count + ' item' + (c.count === 1 ? '' : 's') + ')');
+      const lead = cover.length === 1 ? 'One store covers everything: ' : cover.length + ' stores covers everything: ';
+      document.getElementById('mylist-suggestion').textContent = lead + parts.join(' and ') + '.';
+      footerEl.classList.add('open');
+    } else {
+      footerEl.classList.remove('open');
+    }
+  }
+  document.getElementById('group-by-store-btn').addEventListener('click', () => {
+    myList = myList.slice().sort((a, b) => a.merchant.localeCompare(b.merchant));
+    renderMyList();
+  });
+
+  // ---------- Tabs ----------
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentTab = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      document.getElementById('deals-view').style.display = currentTab === 'deals' ? 'block' : 'none';
+      document.getElementById('mylist-view').classList.toggle('open', currentTab === 'mylist');
+      document.getElementById('search-row').style.display = currentTab === 'deals' ? 'flex' : 'none';
+      document.getElementById('status-row').style.display = currentTab === 'deals' ? 'flex' : 'none';
+    });
+  });
+
+  // ---------- Best-per-merchant toggle ----------
+  function updateBestSwitch() {
+    document.getElementById('best-switch').classList.toggle('on', document.getElementById('best-per-merchant').checked);
+  }
+  document.getElementById('best-toggle-label').addEventListener('click', (e) => {
+    e.preventDefault();
+    const cb = document.getElementById('best-per-merchant');
+    cb.checked = !cb.checked;
+    updateBestSwitch();
+    renderDeals();
+  });
+
+  document.getElementById('filter-query').addEventListener('input', renderDeals);
+
+  // ---------- Postal code entry / switching ----------
+  document.getElementById('postal-chip').addEventListener('click', () => {
+    const row = document.getElementById('postal-edit-row');
+    row.classList.toggle('open');
+    if (row.classList.contains('open')) {
+      document.getElementById('postal-edit-input').value = postalCode;
+      document.getElementById('postal-edit-input').focus();
+    }
+  });
+  document.getElementById('postal-edit-row').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = document.getElementById('postal-edit-input').value.trim();
+    if (!v) return;
+    document.getElementById('postal-edit-row').classList.remove('open');
+    startLoadingFor(v);
+  });
+  document.getElementById('onboarding-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const v = document.getElementById('onboarding-postal').value.trim();
+    if (!v) return;
+    startLoadingFor(v);
+  });
+
+  async function startLoadingFor(code) {
+    postalCode = code;
+    localStorage.setItem('groc_postal_code', code);
+    document.getElementById('onboarding').style.display = 'none';
+    document.getElementById('main-app').style.display = 'flex';
+    document.getElementById('postal-chip').textContent = code.toUpperCase() + ' ▾';
+
+    allResults = [];
+    selectedCategories.clear();
+    deselectedStores.clear();
+    document.getElementById('filter-query').value = '';
+    document.getElementById('results-list').innerHTML = '';
+    document.getElementById('no-results').classList.remove('open');
+    document.getElementById('loading-bar').classList.add('open');
+    document.getElementById('loading-title').textContent = 'Loading deals for ' + code.toUpperCase();
+
+    try {
+      let offset = 0;
+      for (let page = 0; page < MAX_PAGES; page++) {
+        document.getElementById('loading-count').textContent = allResults.length.toLocaleString();
+        const params = new URLSearchParams({ postal_code: code, limit: PAGE_SIZE, offset });
+        const res = await fetch('/api/search?' + params.toString());
+        const data = await res.json();
+        if (!res.ok) {
+          document.getElementById('loading-bar').classList.remove('open');
+          document.getElementById('status-text').textContent = 'Error: ' + (data.error || res.status);
+          return;
+        }
+        allResults = allResults.concat(data.results || []);
+        if (!data.has_more) break;
+        offset += PAGE_SIZE;
+      }
+    } catch (err) {
+      document.getElementById('loading-bar').classList.remove('open');
+      document.getElementById('status-text').textContent = 'Error: ' + err;
+      return;
+    }
+
+    document.getElementById('loading-bar').classList.remove('open');
+    renderDeals();
+  }
+
+  // ---------- Ask sheet ----------
+  function openAskSheet() {
+    document.getElementById('ask-sheet-overlay').classList.add('open');
+  }
+  function closeAskSheet() { document.getElementById('ask-sheet-overlay').classList.remove('open'); }
+  document.getElementById('ask-open-btn').addEventListener('click', openAskSheet);
+  document.getElementById('ask-sheet-close').addEventListener('click', closeAskSheet);
+  document.querySelector('#ask-sheet-overlay .sheet-scrim').addEventListener('click', closeAskSheet);
+
+  document.querySelectorAll('.ask-prompt').forEach(btn => {
+    btn.addEventListener('click', () => { document.getElementById('ask-question').value = btn.textContent; updateAskSendState(); });
+  });
+  function updateAskSendState() {
+    document.getElementById('ask-send').disabled = !document.getElementById('ask-question').value.trim();
+  }
+  document.getElementById('ask-question').addEventListener('input', updateAskSendState);
+
+  document.getElementById('ask-input-row').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const question = document.getElementById('ask-question').value.trim();
+    if (!question) return;
+    lastQuestion = question;
+
+    document.getElementById('ask-prompts-section').classList.remove('open');
+    document.getElementById('ask-answer-section').classList.remove('open');
+    document.getElementById('ask-thinking-section').classList.add('open');
+    document.getElementById('ask-thinking-text').textContent = 'Checking ' + allResults.length.toLocaleString() + ' flyer items…';
+
+    try {
+      const res = await fetch('/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, postal_code: postalCode || null }),
+      });
+      const data = await res.json();
+      document.getElementById('ask-thinking-section').classList.remove('open');
+      if (!res.ok) {
+        document.getElementById('ask-answer-section').classList.add('open');
+        document.getElementById('ask-answer-text').textContent = data.error || 'Something went wrong.';
+        document.getElementById('ask-grounded-row').style.display = 'none';
+        document.getElementById('ask-sources').innerHTML = '';
+        return;
+      }
+      document.getElementById('ask-grounded-row').style.display = 'flex';
+      document.getElementById('ask-answer-section').classList.add('open');
+      document.getElementById('ask-answer-text').textContent = data.answer || '';
+      const sources = data.sources || [];
+      document.getElementById('ask-grounded-label').textContent = 'GROUNDED IN ' + sources.length + ' FLYER ITEM' + (sources.length === 1 ? '' : 'S');
+      document.getElementById('ask-sources').innerHTML = sources.map(s => {
+        const bgStyle = s.cutout_image_url ? ' style="background-image: url(\'' + s.cutout_image_url.replace(/'/g, "%27") + '\')"' : '';
+        return (
+          '<div class="ask-source-row">' +
+            '<div class="ask-source-image"' + bgStyle + '></div>' +
+            '<div class="ask-source-mid">' +
+              '<div class="ask-source-item">' + escapeHtml(s.item_name) + '</div>' +
+              '<div class="ask-source-meta">' + escapeHtml(s.merchant) + ' · ' + (s.valid_to ? 'to ' + escapeHtml(s.valid_to.slice(0, 10)) : '') + '</div>' +
+            '</div>' +
+            '<div class="ask-source-price-col">' +
+              '<div class="ask-source-price">' + priceText(s) + '</div>' +
+              (priceSuffixText(s) ? '<div class="ask-source-suffix">' + escapeHtml(priceSuffixText(s)) + '</div>' : '') +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+    } catch (err) {
+      document.getElementById('ask-thinking-section').classList.remove('open');
+      document.getElementById('ask-answer-section').classList.add('open');
+      document.getElementById('ask-answer-text').textContent = 'Error: ' + err;
+    }
+  });
+
+  document.getElementById('ask-open-search-link').addEventListener('click', () => {
+    const words = lastQuestion.toLowerCase().replace(/[^a-z0-9'\s]/g, ' ').split(/\s+/).filter(w => w && !STOPWORDS.has(w));
+    document.getElementById('filter-query').value = words.join(' ');
+    closeAskSheet();
+    document.querySelector('.tab-btn[data-tab="deals"]').click();
+    renderDeals();
+  });
+
+  // Ask sheet should open on prompts by default when opened empty.
+  document.getElementById('ask-open-btn').addEventListener('click', () => {
+    if (!document.getElementById('ask-answer-section').classList.contains('open') &&
+        !document.getElementById('ask-thinking-section').classList.contains('open')) {
+      document.getElementById('ask-prompts-section').classList.add('open');
+    }
+  });
+
+  // ---------- Boot ----------
+  renderMyList();
+  if (postalCode) {
+    document.getElementById('onboarding-postal').value = postalCode;
+    startLoadingFor(postalCode);
+  }
+})();
 </script>
 </body>
 </html>
