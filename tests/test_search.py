@@ -157,6 +157,38 @@ def test_search_empty_query_lists_everything_for_postal_code():
     assert {r["item_name"] for r in rows} == {"Chicken Breast", "Bananas"}
 
 
+def test_search_empty_query_excludes_zero_price_junk():
+    # e.g. a $0 subsidized-phone row leaking in via a "Groceries"-tagged
+    # flyer that also covers electronics -- looks broken sorting first in a
+    # default cheapest-first browse with no search term to justify showing it.
+    conn = _conn_with(
+        _row(flyer_id=1, merchant="Walmart", item_name="Subsidized Phone", price=0.0, raw_price_text="0.0"),
+        _row(flyer_id=2, merchant="No Frills", item_name="Bananas", price=0.79),
+    )
+    rows = search_items(conn, "")
+    assert [r["item_name"] for r in rows] == ["Bananas"]
+
+
+def test_search_empty_query_still_includes_null_price_rows():
+    # Unlike price <= 0 (junk), a null price (unparsed promo text, e.g. "Entire
+    # Line") is still a real item worth showing -- just deprioritized to the end.
+    conn = _conn_with(
+        _row(flyer_id=1, merchant="Healthy Planet", item_name="Entire Line", price=None, raw_price_text=""),
+        _row(flyer_id=2, merchant="No Frills", item_name="Bananas", price=0.79),
+    )
+    rows = search_items(conn, "")
+    assert [r["item_name"] for r in rows] == ["Bananas", "Entire Line"]
+
+
+def test_search_keyword_query_still_includes_zero_price_matches():
+    # A real search for a specific product is different from a blind browse:
+    # if a store is genuinely giving that product away for $0, it's a real
+    # match worth surfacing, not junk to hide.
+    conn = _conn_with(_row(item_name="Free Sample Chicken Breast", price=0.0, raw_price_text="0.0"))
+    rows = search_items(conn, "chicken breast")
+    assert len(rows) == 1
+
+
 def test_top_deals_orders_cheapest_first_across_all_items():
     conn = _conn_with(
         _row(flyer_id=1, merchant="Metro", item_name="Steak", price=19.99),

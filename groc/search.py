@@ -22,7 +22,14 @@ def search_items(
 
     An empty/blank query means "no item-name filter" — e.g. just list every
     item for a postal code, so a client can page through everything and
-    filter it further client-side.
+    filter it further client-side. In that mode, price <= 0 rows are also
+    excluded (same reasoning as top_deals(): Flipp categorizes whole flyers
+    rather than individual items, so a "Groceries"-tagged big-box flyer can
+    still contain $0 subsidized-phone rows, which otherwise sort first in a
+    default cheapest-first browse and look like a broken/junk result). A real
+    keyword search doesn't apply this -- if someone specifically searches for
+    a product and a store is genuinely giving it away for $0, that's a real
+    match worth surfacing, not junk to hide.
 
     `offset` paginates: fetch repeatedly with offset += limit until a page
     comes back shorter than `limit` to get every matching row. The ORDER BY
@@ -33,6 +40,9 @@ def search_items(
     tokens = query.strip().split()
     where = ["LOWER(item_name) LIKE ? ESCAPE '\\'"] * len(tokens)
     params: list = [_like_pattern(t) for t in tokens]
+
+    if not tokens:
+        where.append("(price IS NULL OR price > 0)")
 
     if postal_code:
         where.append("postal_code = ?")
