@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import pytest
+
 from groc import db
 from groc.chat import ask, extract_keywords
 
@@ -137,6 +139,47 @@ def test_ask_returns_empty_sources_when_nothing_matches():
     conn = _conn_with(_row(item_name="Chicken Breast 1kg"))
     result = ask(conn, "durian", client=_FakeClient())
     assert result.sources == []
+
+
+def test_ask_returns_friendly_message_when_no_api_credentials_configured():
+    # The real Anthropic SDK raises a plain TypeError (not a dedicated
+    # exception class) with this exact message when it can't find any
+    # credentials -- confirmed against the live production deployment,
+    # which currently has no ANTHROPIC_API_KEY set. ask() should turn this
+    # into an honest "not set up yet" answer, not propagate a crash that
+    # webapp.py would otherwise turn into a generic 500.
+    conn = _conn_with(_row())
+
+    class _NoCredsMessages:
+        def create(self, **kwargs):
+            raise TypeError(
+                "Could not resolve authentication method. Expected one of api_key, "
+                "auth_token, or credentials to be set."
+            )
+
+    class _NoCredsClient:
+        messages = _NoCredsMessages()
+
+    result = ask(conn, "chicken breast", client=_NoCredsClient())
+    assert "isn't set up yet" in result.answer.lower()
+    assert result.sources == []
+
+
+def test_ask_reraises_unrelated_type_errors():
+    # Only the specific "no credentials" TypeError should be swallowed --
+    # a genuine bug that happens to also raise TypeError must still surface,
+    # not get silently mistaken for "Ask isn't configured".
+    conn = _conn_with(_row())
+
+    class _BrokenMessages:
+        def create(self, **kwargs):
+            raise TypeError("unrelated bug: unsupported operand type(s)")
+
+    class _BrokenClient:
+        messages = _BrokenMessages()
+
+    with pytest.raises(TypeError, match="unrelated bug"):
+        ask(conn, "chicken breast", client=_BrokenClient())
 
 
 def test_ask_falls_back_to_top_deals_when_no_product_named():

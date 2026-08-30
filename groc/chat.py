@@ -100,14 +100,29 @@ def ask(
         rows = top_deals(conn, postal_code=postal_code, limit=search_limit)
     context = _format_context(rows)
 
-    response = client.messages.create(
-        model=model,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        messages=[{
-            "role": "user",
-            "content": f"Flyer deals:\n{context}\n\nQuestion: {question}",
-        }],
-    )
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[{
+                "role": "user",
+                "content": f"Flyer deals:\n{context}\n\nQuestion: {question}",
+            }],
+        )
+    except TypeError as e:
+        # The Anthropic SDK raises a plain TypeError (not a purpose-built
+        # exception) when it can't find any credentials at all -- confirmed
+        # live: this deployment currently has no ANTHROPIC_API_KEY set, so
+        # every real Ask request hits exactly this. Without this check it
+        # surfaces as a generic "internal server error" via webapp.py's
+        # catch-all handler, which is technically fine (no crash, no leaked
+        # detail) but reads like something is broken rather than "this
+        # feature isn't turned on yet". Matching on the SDK's own message
+        # text is fragile, but there's no dedicated exception class for this
+        # specific case to catch instead.
+        if "could not resolve authentication method" in str(e).lower():
+            return AskResult(answer="Ask isn't set up yet on this deployment — check back soon!", sources=[])
+        raise
     answer = next((block.text for block in response.content if block.type == "text"), "")
     return AskResult(answer=answer, sources=[dict(row) for row in rows])
