@@ -61,6 +61,7 @@ def pg_conn():
     conn = db.connect(DSN)
     db.init_db(conn)
     conn.execute("DELETE FROM flyer_items")
+    conn.execute("DELETE FROM tracked_postal_codes")
     conn.commit()
     yield conn
     conn.close()
@@ -168,3 +169,19 @@ def test_webapp_search_endpoint_against_postgres():
     resp = app.test_client().get("/api/search?q=chicken")
     assert resp.status_code == 200
     assert resp.get_json()["results"][0]["merchant"] == "No Frills"
+
+
+def test_track_postal_code_on_conflict_do_nothing_against_postgres(pg_conn):
+    # ON CONFLICT (postal_code) DO NOTHING -- worth verifying directly since
+    # Postgres's ON CONFLICT syntax/behavior isn't guaranteed identical to
+    # SQLite's just because the same SQL string parses on both.
+    db.track_postal_code(pg_conn, "M5V2H1")
+    db.track_postal_code(pg_conn, "M5V2H1")
+    assert db.list_tracked_postal_codes(pg_conn) == ["M5V2H1"]
+
+
+def test_mark_postal_code_scraped_against_postgres(pg_conn):
+    db.track_postal_code(pg_conn, "M5V2H1")
+    db.mark_postal_code_scraped(pg_conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
+    row = pg_conn.execute("SELECT * FROM tracked_postal_codes WHERE postal_code = 'M5V2H1'").fetchone()
+    assert row["last_scraped_at"] == "2026-08-30T06:00:00+00:00"

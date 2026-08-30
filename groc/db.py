@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS flyer_items (
 CREATE INDEX IF NOT EXISTS idx_flyer_items_item_name ON flyer_items(item_name);
 CREATE INDEX IF NOT EXISTS idx_flyer_items_merchant ON flyer_items(merchant);
 CREATE INDEX IF NOT EXISTS idx_flyer_items_postal_code ON flyer_items(postal_code);
+
+CREATE TABLE IF NOT EXISTS tracked_postal_codes (
+    postal_code TEXT PRIMARY KEY,
+    first_requested_at TEXT NOT NULL,
+    last_scraped_at TEXT
+);
 """
 
 # Same shape as _SQLITE_SCHEMA -- only the primary key syntax differs
@@ -79,6 +85,12 @@ CREATE TABLE IF NOT EXISTS flyer_items (
 CREATE INDEX IF NOT EXISTS idx_flyer_items_item_name ON flyer_items(item_name);
 CREATE INDEX IF NOT EXISTS idx_flyer_items_merchant ON flyer_items(merchant);
 CREATE INDEX IF NOT EXISTS idx_flyer_items_postal_code ON flyer_items(postal_code);
+
+CREATE TABLE IF NOT EXISTS tracked_postal_codes (
+    postal_code TEXT PRIMARY KEY,
+    first_requested_at TEXT NOT NULL,
+    last_scraped_at TEXT
+);
 """
 
 # Columns added after the initial release. init_db() ALTER TABLEs these into
@@ -230,6 +242,36 @@ def upsert_items(conn, rows: Iterable[dict]) -> int:
         cur.executemany(_UPSERT_SQL, rows)
     conn.commit()
     return len(rows)
+
+
+_TRACK_POSTAL_CODE_SQL = """
+INSERT INTO tracked_postal_codes (postal_code, first_requested_at, last_scraped_at)
+VALUES (:postal_code, :first_requested_at, NULL)
+ON CONFLICT (postal_code) DO NOTHING;
+"""
+
+
+def track_postal_code(conn, postal_code: str) -> None:
+    """Record that a postal code has been requested, so a scheduled job can pick it up.
+
+    A no-op if it's already tracked -- this is called on every search, not just
+    the first time, so it has to stay cheap and idempotent.
+    """
+    conn.execute(_TRACK_POSTAL_CODE_SQL, {"postal_code": postal_code, "first_requested_at": utcnow_iso()})
+    conn.commit()
+
+
+def list_tracked_postal_codes(conn) -> list[str]:
+    rows = conn.execute("SELECT postal_code FROM tracked_postal_codes ORDER BY postal_code").fetchall()
+    return [row["postal_code"] for row in rows]
+
+
+def mark_postal_code_scraped(conn, postal_code: str, scraped_at: str) -> None:
+    conn.execute(
+        "UPDATE tracked_postal_codes SET last_scraped_at = ? WHERE postal_code = ?",
+        (scraped_at, postal_code),
+    )
+    conn.commit()
 
 
 def utcnow_iso() -> str:

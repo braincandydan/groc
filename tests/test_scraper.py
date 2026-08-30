@@ -1,5 +1,7 @@
+import tempfile
+
 from groc import db
-from groc.scraper import scrape_postal_code
+from groc.scraper import run_tracked, scrape_postal_code
 
 
 class FakeFlippClient:
@@ -87,3 +89,37 @@ def test_scrape_postal_code_missing_cutout_image_url_stores_null():
     row = conn.execute("SELECT * FROM flyer_items").fetchone()
     assert row["cutout_image_url"] is None
     assert row["category"] == "Groceries"
+
+
+def test_run_tracked_scrapes_every_tracked_postal_code(monkeypatch):
+    flyers = [{"id": 1, "merchant": "No Frills", "categories": ["Groceries"]}]
+    items_by_flyer = {1: [{"name": "Milk 2L", "price": "$3.99"}]}
+    fake_client = FakeFlippClient(flyers, items_by_flyer)
+    monkeypatch.setattr("groc.scraper.FlippClient", lambda: fake_client)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    setup_conn = db.connect(tmp.name)
+    db.init_db(setup_conn)
+    db.track_postal_code(setup_conn, "M5V2H1")
+    db.track_postal_code(setup_conn, "V1Y7M4")
+    setup_conn.close()
+
+    results = run_tracked(tmp.name)
+
+    assert results == {"M5V2H1": 1, "V1Y7M4": 1}
+
+    check_conn = db.connect(tmp.name)
+    rows = check_conn.execute("SELECT * FROM tracked_postal_codes ORDER BY postal_code").fetchall()
+    assert [r["postal_code"] for r in rows] == ["M5V2H1", "V1Y7M4"]
+    assert all(r["last_scraped_at"] is not None for r in rows)
+
+
+def test_run_tracked_with_no_tracked_postal_codes_does_nothing(monkeypatch):
+    fake_client = FakeFlippClient([], {})
+    monkeypatch.setattr("groc.scraper.FlippClient", lambda: fake_client)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+
+    assert run_tracked(tmp.name) == {}

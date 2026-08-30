@@ -114,3 +114,37 @@ def test_init_db_is_idempotent_when_columns_already_exist():
     db.init_db(conn)  # should not raise on the second call
     db.upsert_items(conn, [_row()])
     assert conn.execute("SELECT COUNT(*) FROM flyer_items").fetchone()[0] == 1
+
+
+def test_track_postal_code_is_idempotent():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    db.track_postal_code(conn, "M5V2H1")
+    db.track_postal_code(conn, "M5V2H1")  # searched twice -- should not duplicate
+
+    rows = conn.execute("SELECT * FROM tracked_postal_codes").fetchall()
+    assert len(rows) == 1
+    assert rows[0]["postal_code"] == "M5V2H1"
+    assert rows[0]["last_scraped_at"] is None
+
+
+def test_list_tracked_postal_codes_returns_sorted():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    db.track_postal_code(conn, "V1Y7M4")
+    db.track_postal_code(conn, "M5V2H1")
+
+    assert db.list_tracked_postal_codes(conn) == ["M5V2H1", "V1Y7M4"]
+
+
+def test_mark_postal_code_scraped_sets_timestamp():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    db.track_postal_code(conn, "M5V2H1")
+
+    db.mark_postal_code_scraped(conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
+
+    row = conn.execute("SELECT * FROM tracked_postal_codes WHERE postal_code = 'M5V2H1'").fetchone()
+    assert row["last_scraped_at"] == "2026-08-30T06:00:00+00:00"

@@ -56,6 +56,11 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
             return jsonify({"error": "'limit' and 'offset' must be integers"}), 400
 
         conn = _connect()
+        if postal_code:
+            # Lets the scheduled scraper (groc scrape-tracked) pick up a
+            # postal code the next time it runs, even if it has zero data
+            # right now -- see docs/PROJECT_PLAN.md Phase 5.
+            db.track_postal_code(conn, postal_code)
         rows = search_items(conn, query, postal_code=postal_code, limit=limit, offset=offset)
         # Whether the client might need another page -- best_per_merchant
         # collapses rows *after* this check, since it answers "was this page

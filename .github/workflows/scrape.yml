@@ -1,0 +1,25 @@
+name: Scheduled flyer scrape
+
+on:
+  schedule:
+    # 13:23 UTC daily -- an off-the-hour time so this doesn't land on the
+    # same minute as everyone else's midnight/9am cron jobs.
+    - cron: '23 13 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -e .
+
+      - name: Re-scrape every tracked postal code
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python -m groc.cli scrape-tracked --db "$DATABASE_URL" -v

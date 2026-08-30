@@ -100,7 +100,7 @@ def scrape_postal_code(
 
 
 def run(postal_codes: Iterable[str], db_path: str, categories: Optional[set[str]] = DEFAULT_CATEGORIES) -> int:
-    """Scrape a batch of postal codes end-to-end into the given SQLite database."""
+    """Scrape a batch of postal codes end-to-end into the given database."""
     client = FlippClient()
     conn = db.connect(db_path)
     db.init_db(conn)
@@ -108,6 +108,30 @@ def run(postal_codes: Iterable[str], db_path: str, categories: Optional[set[str]
     try:
         for postal_code in postal_codes:
             total += scrape_postal_code(client, conn, postal_code, categories=categories)
+            db.track_postal_code(conn, postal_code)
+            db.mark_postal_code_scraped(conn, postal_code, db.utcnow_iso())
     finally:
         conn.close()
     return total
+
+
+def run_tracked(db_path: str, categories: Optional[set[str]] = DEFAULT_CATEGORIES) -> dict[str, int]:
+    """Re-scrape every postal code in tracked_postal_codes -- the scheduled-job entrypoint.
+
+    Covers both "keep existing postal codes fresh" and "pick up a postal code
+    someone searched for the first time" (the web app tracks every searched
+    postal code via db.track_postal_code(), even ones with no data yet) with
+    the same pass, since a never-scraped postal code and a stale one are
+    handled identically: scrape it, record when.
+    """
+    client = FlippClient()
+    conn = db.connect(db_path)
+    db.init_db(conn)
+    results: dict[str, int] = {}
+    try:
+        for postal_code in db.list_tracked_postal_codes(conn):
+            results[postal_code] = scrape_postal_code(client, conn, postal_code, categories=categories)
+            db.mark_postal_code_scraped(conn, postal_code, db.utcnow_iso())
+    finally:
+        conn.close()
+    return results

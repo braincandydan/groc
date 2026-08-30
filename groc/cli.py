@@ -8,7 +8,7 @@ from typing import Optional, Sequence
 
 from . import db
 from .chat import ask as chat_ask
-from .scraper import DEFAULT_CATEGORIES, run
+from .scraper import DEFAULT_CATEGORIES, run, run_tracked
 from .search import best_by_merchant, search_items
 
 
@@ -56,6 +56,21 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--postal-code", "-p", type=_valid_postal_code, help="Restrict to one postal code")
     ask.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
 
+    scrape_tracked = subparsers.add_parser(
+        "scrape-tracked",
+        help="Re-scrape every postal code anyone has searched, for a scheduled job (e.g. GitHub Actions)",
+    )
+    scrape_tracked.add_argument("--db", default="groc.db", help="Path to the SQLite database file or a Postgres URL")
+    scrape_tracked.add_argument(
+        "--all-categories", action="store_true",
+        help="Do not filter flyers by category (default: only 'Groceries')",
+    )
+    scrape_tracked.add_argument(
+        "--category", dest="categories", action="append",
+        help="Flyer category to include (repeat for multiple); default: Groceries",
+    )
+    scrape_tracked.add_argument("-v", "--verbose", action="store_true", help="Enable verbose logging")
+
     serve = subparsers.add_parser("serve", help="Run the web UI + API (search and ask)")
     serve.add_argument("--db", default="groc.db", help="Path to the SQLite database file")
     serve.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
@@ -87,6 +102,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if args.best_per_merchant:
             rows = best_by_merchant(rows)
         _print_results(rows)
+        return 0
+
+    if args.command == "scrape-tracked":
+        categories = None if args.all_categories else set(args.categories or DEFAULT_CATEGORIES)
+        results = run_tracked(args.db, categories=categories)
+        if not results:
+            print("No tracked postal codes yet -- nothing to do.")
+        for postal_code, total in results.items():
+            print(f"{postal_code}: stored/updated {total} rows")
+        print(f"Done. {len(results)} postal code(s) refreshed.")
         return 0
 
     if args.command == "ask":

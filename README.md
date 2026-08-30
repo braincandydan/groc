@@ -151,11 +151,41 @@ needed for those.
 
 ## Scheduling
 
-Run the scraper daily with cron, e.g.:
+For a fixed list of postal codes on your own machine, cron works fine:
 
 ```cron
 0 6 * * * cd /path/to/groc && /path/to/.venv/bin/python -m groc.cli scrape -p M5V2H1 --db groc.db >> logs/scrape.log 2>&1
 ```
+
+**For the production deployment**, a GitHub Actions scheduled workflow
+(`.github/workflows/scrape.yml`) re-scrapes every postal code anyone has
+searched, once a day, so prices stay current as flyers update weekly and a
+newly-searched postal code gets real data within a day instead of never.
+This is what makes postal codes "dynamic" without needing instant on-demand
+scraping (a full scrape takes 30-90+ seconds — too slow for a live web
+request on serverless hosting, and there's no meaningful time limit on a
+scheduled GitHub Actions job).
+
+How it works: `/api/search` calls `db.track_postal_code()` on every request
+with a postal code, recording it in the `tracked_postal_codes` table whether
+it has data yet or not. The workflow runs:
+
+```bash
+python -m groc.cli scrape-tracked --db "$DATABASE_URL"
+```
+
+which re-scrapes every tracked postal code and updates `last_scraped_at`.
+
+**One-time setup**: add the production Postgres connection string as a
+repository secret named `DATABASE_URL` (Settings → Secrets and variables →
+Actions → New repository secret), or via the CLI:
+
+```bash
+gh secret set DATABASE_URL --body "postgresql://...(from Vercel/Neon)..."
+```
+
+Trigger it manually to test before waiting for the schedule: Actions tab →
+"Scheduled flyer scrape" → Run workflow.
 
 ## Database schema
 

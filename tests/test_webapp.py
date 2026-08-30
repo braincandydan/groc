@@ -153,6 +153,16 @@ def test_api_search_postal_code_filter(app_and_db):
     assert data["results"][0]["merchant"] == "Save-On-Foods"
 
 
+def test_api_search_tracks_the_postal_code_even_with_no_data(app_and_db):
+    # So the scheduled scraper (groc scrape-tracked) picks up a postal code
+    # someone searched for the first time, even though it has zero rows now.
+    client = app_and_db.test_client()
+    client.get("/api/search?postal_code=X1Y2Z3")
+
+    conn = db.connect(app_and_db.config["DB_PATH"])
+    assert "X1Y2Z3" in db.list_tracked_postal_codes(conn)
+
+
 def test_api_ask_returns_answer_and_sources(app_and_db):
     client = app_and_db.test_client()
     resp = client.post("/api/ask", json={"question": "what's the best deal on chicken breast"})
