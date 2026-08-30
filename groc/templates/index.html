@@ -76,6 +76,7 @@
     height: 52px; background: var(--pine); color: var(--marigold); border: none;
     font-size: 14px; font-weight: 800; letter-spacing: .1em; display: flex; align-items: center; justify-content: center;
   }
+  .btn-primary:disabled { opacity: .7; }
   .helper-text { font-size: 12px; color: var(--muted); text-wrap: pretty; }
   .field-error { display: none; font-size: 12px; font-weight: 600; color: var(--red); text-wrap: pretty; }
   .field-error.open { display: block; }
@@ -95,7 +96,8 @@
   }
   #postal-edit-panel { display: none; flex-direction: column; gap: 8px; }
   #postal-edit-panel.open { display: flex; }
-  #postal-edit-city-picker-btn { height: 36px; background: var(--marigold); color: var(--pine); border: none; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+  #postal-edit-city-picker-btn, #postal-edit-use-location-btn { height: 36px; background: var(--marigold); color: var(--pine); border: none; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+  #postal-edit-use-location-btn:disabled { opacity: .7; }
   #postal-edit-row { gap: 6px; }
   #postal-edit-input {
     flex: 1; height: 36px; border: 1px solid var(--on-pine-border); background: #fff; padding: 0 8px;
@@ -387,6 +389,7 @@
       </div>
       <div class="field-group">
         <button type="button" class="btn-primary" id="onboarding-city-picker-btn">CHOOSE YOUR CITY</button>
+        <button type="button" class="btn-primary" id="onboarding-use-location-btn">📍 USE MY LOCATION</button>
         <button type="button" class="text-link-btn" id="onboarding-postal-toggle-btn">Or enter your postal code</button>
       </div>
       <form id="onboarding-form" class="field-group" style="display: none">
@@ -412,6 +415,7 @@
       </div>
       <div id="postal-edit-panel">
         <button type="button" id="postal-edit-city-picker-btn">CHOOSE A DIFFERENT CITY</button>
+        <button type="button" id="postal-edit-use-location-btn">📍 USE MY LOCATION</button>
         <button type="button" class="text-link-btn" id="postal-edit-postal-toggle-btn">Or enter your postal code</button>
         <form id="postal-edit-row" style="display: none">
           <input id="postal-edit-input" autocomplete="off">
@@ -1458,20 +1462,24 @@
       : '');
     listEl.querySelectorAll('.city-picker-item').forEach(btn => {
       btn.addEventListener('click', () => {
-        const postal = btn.dataset.postal;
         closeCityPicker();
-        // Reuse the existing validated submit flow rather than duplicating
-        // it -- these are real, verified postal codes so validation always
-        // passes, but this keeps one code path instead of two.
-        if (document.getElementById('onboarding').style.display !== 'none') {
-          document.getElementById('onboarding-postal').value = postal;
-          document.getElementById('onboarding-form').requestSubmit();
-        } else {
-          document.getElementById('postal-edit-input').value = postal;
-          document.getElementById('postal-edit-row').requestSubmit();
-        }
+        submitVerifiedPostalCode(btn.dataset.postal);
       });
     });
+  }
+
+  // Reuse the existing validated submit flow rather than duplicating it --
+  // callers here (city picker, "Use my location") only ever pass real,
+  // verified postal codes, so validation always passes, but this keeps one
+  // load-deals code path instead of several.
+  function submitVerifiedPostalCode(postal) {
+    if (document.getElementById('onboarding').style.display !== 'none') {
+      document.getElementById('onboarding-postal').value = postal;
+      document.getElementById('onboarding-form').requestSubmit();
+    } else {
+      document.getElementById('postal-edit-input').value = postal;
+      document.getElementById('postal-edit-row').requestSubmit();
+    }
   }
   function openCityPicker() {
     document.getElementById('city-picker-search').value = '';
@@ -1496,6 +1504,86 @@
   document.getElementById('postal-edit-city-picker-btn').addEventListener('click', openCityPicker);
   document.getElementById('city-picker-close-btn').addEventListener('click', closeCityPicker);
   document.getElementById('city-picker-scrim').addEventListener('click', closeCityPicker);
+
+  // ---------- Use my location ----------
+  // Finds the nearest Canadian FSA (postal code prefix) to the browser's own
+  // geolocation coordinates, entirely client-side -- no external geocoding
+  // API, no cost. /api/fsa-centroids serves one real lat/long + real postal
+  // code per FSA (~1,665 of them, from the same GeoNames dataset as
+  // /api/places), fetched once in the background like canadianPlaces above.
+  let fsaCentroids = [];
+  let fsaCentroidsLoadPromise = null;
+  function loadFsaCentroids() {
+    if (!fsaCentroidsLoadPromise) {
+      fsaCentroidsLoadPromise = fetch('/api/fsa-centroids')
+        .then(r => r.json())
+        .then(data => { fsaCentroids = data; })
+        .catch(() => { fsaCentroids = []; });
+    }
+    return fsaCentroidsLoadPromise;
+  }
+  loadFsaCentroids();
+
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const toRad = deg => deg * Math.PI / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.asin(Math.sqrt(a));
+  }
+
+  function nearestPostalCode(lat, lon) {
+    let best = null;
+    let bestDist = Infinity;
+    for (const [, postal, fsaLat, fsaLon] of fsaCentroids) {
+      const dist = haversineKm(lat, lon, fsaLat, fsaLon);
+      if (dist < bestDist) { bestDist = dist; best = postal; }
+    }
+    return best;
+  }
+
+  function geolocationErrorMessage(err) {
+    if (err && err.code === 1) return "Location access was denied. Try choosing your city instead.";
+    if (err && err.code === 2) return "Couldn't determine your location. Try choosing your city instead.";
+    if (err && err.code === 3) return "Finding your location took too long. Try choosing your city instead.";
+    return "Couldn't use your location. Try choosing your city instead.";
+  }
+
+  async function useMyLocation(triggerBtn) {
+    if (!navigator.geolocation) {
+      showToast("Location isn't supported by this browser. Try choosing your city instead.");
+      return;
+    }
+    const originalText = triggerBtn.textContent;
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = '📍 Locating…';
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000, maximumAge: 300000 });
+      });
+      triggerBtn.textContent = '📍 Finding your area…';
+      await loadFsaCentroids();
+      if (fsaCentroids.length === 0) {
+        showToast("Couldn't look up your area right now. Try choosing your city instead.");
+        return;
+      }
+      const postal = nearestPostalCode(position.coords.latitude, position.coords.longitude);
+      if (!postal) {
+        showToast("Couldn't match your location to a postal code. Try choosing your city instead.");
+        return;
+      }
+      submitVerifiedPostalCode(postal);
+    } catch (err) {
+      showToast(geolocationErrorMessage(err));
+    } finally {
+      triggerBtn.disabled = false;
+      triggerBtn.textContent = originalText;
+    }
+  }
+  document.getElementById('onboarding-use-location-btn').addEventListener('click', (e) => useMyLocation(e.currentTarget));
+  document.getElementById('postal-edit-use-location-btn').addEventListener('click', (e) => useMyLocation(e.currentTarget));
+
   document.getElementById('city-picker-search').addEventListener('input', (e) => renderCityPickerList(e.target.value));
 
   // ---------- Postal code entry / switching ----------

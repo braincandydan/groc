@@ -16,7 +16,8 @@ from .scraper import DEFAULT_CATEGORIES, parse_and_store_flyer
 from .search import best_by_merchant, search_items
 
 _PLACES_PATH = Path(__file__).parent / "data" / "canadian_places.json"
-_places_cache: Optional[list] = None
+_FSA_CENTROIDS_PATH = Path(__file__).parent / "data" / "fsa_centroids.json"
+_json_file_cache: dict = {}
 
 # Bounds on the client-submitted ingest payload -- generous enough for any
 # real postal code while keeping a single request's DB work bounded
@@ -32,15 +33,14 @@ MAX_INGEST_ITEMS_PER_FLYER = 2000
 _POSTAL_CODE_RE = re.compile(r"^[A-Z]\d[A-Z]\d[A-Z]\d$")
 
 
-def _load_places() -> list:
-    # Cached at module scope: the file never changes at runtime, and a cold
-    # Vercel function would otherwise re-read+re-parse this ~220KB file on
-    # every single request.
-    global _places_cache
-    if _places_cache is None:
-        with open(_PLACES_PATH, encoding="utf-8") as f:
-            _places_cache = json.load(f)
-    return _places_cache
+def _load_cached_json(path: Path) -> list:
+    # Cached at module scope keyed by path: these files never change at
+    # runtime, and a cold Vercel function would otherwise re-read+re-parse
+    # them on every single request.
+    if path not in _json_file_cache:
+        with open(path, encoding="utf-8") as f:
+            _json_file_cache[path] = json.load(f)
+    return _json_file_cache[path]
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict:
@@ -88,7 +88,19 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         # (CC BY 4.0), one real postal code per place -- lets the "choose
         # your city" picker cover the whole country, not just a curated
         # shortlist. Static per deploy, so cache client-side for a day.
-        resp = jsonify(_load_places())
+        resp = jsonify(_load_cached_json(_PLACES_PATH))
+        resp.cache_control.public = True
+        resp.cache_control.max_age = 86400
+        return resp
+
+    @app.get("/api/fsa-centroids")
+    def api_fsa_centroids():
+        # One real lat/long centroid + real postal code per Canadian FSA
+        # (first 3 characters of a postal code), derived from the same
+        # GeoNames dataset as /api/places -- lets "Use my location" find the
+        # nearest FSA to a raw GPS coordinate entirely client-side, no
+        # external geocoding API/cost. [fsa, postal_code, lat, lon].
+        resp = jsonify(_load_cached_json(_FSA_CENTROIDS_PATH))
         resp.cache_control.public = True
         resp.cache_control.max_age = 86400
         return resp

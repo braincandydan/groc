@@ -296,6 +296,35 @@ def test_api_places_entries_look_like_real_postal_codes(app_and_db):
         assert re.match(r"^[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d$", postal), postal
 
 
+def test_api_fsa_centroids_covers_the_country_with_real_lat_long(app_and_db):
+    # Backs "Use my location": one real lat/long centroid + real postal code
+    # per Canadian FSA (~1,665 of them), derived from the same GeoNames
+    # dataset as /api/places, so nearest-FSA lookup can happen entirely
+    # client-side with no external geocoding API.
+    client = app_and_db.test_client()
+    resp = client.get("/api/fsa-centroids")
+
+    assert resp.status_code == 200
+    centroids = resp.get_json()
+    assert len(centroids) > 1000
+
+    by_fsa = {fsa: (postal, lat, lon) for fsa, postal, lat, lon in centroids}
+    postal, lat, lon = by_fsa["M3C"]  # a known real Toronto FSA
+    assert postal == "M3C 0A1"
+    assert 43 < lat < 44  # Toronto's real latitude, not a placeholder
+    assert -80 < lon < -79
+
+
+def test_api_fsa_centroids_entries_look_like_real_postal_codes(app_and_db):
+    client = app_and_db.test_client()
+    centroids = client.get("/api/fsa-centroids").get_json()
+
+    for fsa, postal, lat, lon in centroids[:50]:
+        assert re.match(r"^[A-Za-z]\d[A-Za-z]$", fsa), fsa
+        assert re.match(r"^[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d$", postal), postal
+        assert isinstance(lat, (int, float)) and isinstance(lon, (int, float))
+
+
 # ---------------------------------------------------------------------------
 # /api/ingest-scrape -- stores a client-side scrape's raw Flipp payload.
 # This is a new attack surface (any browser can POST here), so most of these
