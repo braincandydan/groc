@@ -93,8 +93,10 @@
     border: 1px solid var(--on-pine-border); background: transparent; border-radius: 4px;
     font-size: 12px; font-weight: 600; color: var(--on-pine-text); letter-spacing: .04em; font-variant-numeric: tabular-nums;
   }
-  #postal-edit-row { display: none; gap: 6px; }
-  #postal-edit-row.open { display: flex; }
+  #postal-edit-panel { display: none; flex-direction: column; gap: 8px; }
+  #postal-edit-panel.open { display: flex; }
+  #postal-edit-city-picker-btn { height: 36px; background: var(--marigold); color: var(--pine); border: none; font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+  #postal-edit-row { gap: 6px; }
   #postal-edit-input {
     flex: 1; height: 36px; border: 1px solid var(--on-pine-border); background: #fff; padding: 0 8px;
     font-size: 16px; font-weight: 600; color: var(--ink); text-transform: uppercase;
@@ -107,7 +109,7 @@
      this header's pine background -- confirmed via a real headless-browser
      check (present in the DOM, display:block, but literally the same color
      as its background). */
-  #postal-edit-city-picker-btn { color: var(--marigold); align-self: flex-start; }
+  #postal-edit-postal-toggle-btn { color: var(--marigold); align-self: flex-start; }
   #tab-switcher {
     display: flex; border: 1px solid var(--on-pine-border);
   }
@@ -408,12 +410,15 @@
         <div class="wordmark">groc<span class="dot">.</span></div>
         <button id="postal-chip" type="button"></button>
       </div>
-      <form id="postal-edit-row">
-        <input id="postal-edit-input" autocomplete="off">
-        <button type="submit" id="postal-edit-save">LOAD</button>
-      </form>
-      <div id="postal-edit-error" class="field-error" style="margin: -4px 0 0"></div>
-      <button type="button" class="text-link-btn" id="postal-edit-city-picker-btn" style="display: none">Choose city instead</button>
+      <div id="postal-edit-panel">
+        <button type="button" id="postal-edit-city-picker-btn">CHOOSE A DIFFERENT CITY</button>
+        <button type="button" class="text-link-btn" id="postal-edit-postal-toggle-btn">Or enter your postal code</button>
+        <form id="postal-edit-row" style="display: none">
+          <input id="postal-edit-input" autocomplete="off">
+          <button type="submit" id="postal-edit-save">LOAD</button>
+        </form>
+        <div id="postal-edit-error" class="field-error" style="margin: -4px 0 0"></div>
+      </div>
       <div id="tab-switcher">
         <button type="button" class="tab-btn active" data-tab="deals">DEALS</button>
         <button type="button" class="tab-btn" data-tab="mylist" id="mylist-tab-btn">MY LIST</button>
@@ -1377,15 +1382,23 @@
     // Canadian format: letter-digit-letter, optional space/dash, digit-letter-digit.
     return /^[A-Za-z]\d[A-Za-z]\s?-?\d[A-Za-z]\d$/.test(value.trim());
   }
+  // Changing location from the header mirrors onboarding: lead with
+  // CHOOSE A DIFFERENT CITY, keep manual postal entry as a secondary,
+  // collapsed option -- reset back to that city-first state every time the
+  // panel is (re)opened so it doesn't get stuck showing the postal form.
   document.getElementById('postal-chip').addEventListener('click', () => {
-    const row = document.getElementById('postal-edit-row');
-    row.classList.toggle('open');
+    const panel = document.getElementById('postal-edit-panel');
+    panel.classList.toggle('open');
     document.getElementById('postal-edit-error').classList.remove('open');
-    document.getElementById('postal-edit-city-picker-btn').style.display = row.classList.contains('open') ? 'block' : 'none';
-    if (row.classList.contains('open')) {
-      document.getElementById('postal-edit-input').value = postalCode;
-      document.getElementById('postal-edit-input').focus();
-    }
+    document.getElementById('postal-edit-row').style.display = 'none';
+    document.getElementById('postal-edit-postal-toggle-btn').style.display = 'block';
+    document.getElementById('postal-edit-input').value = postalCode;
+  });
+  document.getElementById('postal-edit-postal-toggle-btn').addEventListener('click', (e) => {
+    e.target.style.display = 'none';
+    const row = document.getElementById('postal-edit-row');
+    row.style.display = 'flex';
+    document.getElementById('postal-edit-input').focus();
   });
   document.getElementById('postal-edit-row').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -1398,7 +1411,7 @@
       return;
     }
     errorEl.classList.remove('open');
-    document.getElementById('postal-edit-row').classList.remove('open');
+    document.getElementById('postal-edit-panel').classList.remove('open');
     startLoadingFor(v);
   });
   document.getElementById('onboarding-form').addEventListener('submit', (e) => {
