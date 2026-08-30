@@ -282,7 +282,7 @@
   #ask-grounded-label { font-size: 11px; font-weight: 800; letter-spacing: .12em; color: var(--muted); }
   #ask-open-search-link { font-size: 11.5px; font-weight: 700; color: var(--pine); text-decoration: underline; background: none; border: none; }
   #ask-sources { border: 1.5px solid var(--pine); }
-  .ask-source-row { display: flex; gap: 10px; padding: 10px; border-bottom: 1px solid var(--pine); align-items: center; }
+  .ask-source-row { display: flex; gap: 10px; padding: 10px; border-bottom: 1px solid var(--pine); align-items: center; cursor: pointer; }
   .ask-source-row:last-child { border-bottom: none; }
   .ask-source-image { width: 38px; height: 38px; flex: none; background: var(--placeholder-bg); border: 1px solid var(--pine); background-size: cover; background-position: center; }
   .ask-source-mid { flex: 1; min-width: 0; }
@@ -293,11 +293,19 @@
   .ask-source-suffix { font-size: 10.5px; color: var(--meta); }
   #ask-disclaimer { font-size: 11.5px; color: var(--muted); text-wrap: pretty; }
 
-  /* ---------- Image lightbox ---------- */
-  .deal-image[data-image-url], .ask-source-image[data-image-url] { cursor: pointer; }
-  #lightbox-panel { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px; max-width: 100%; max-height: 100%; }
-  #lightbox-img { max-width: 100%; max-height: 65vh; border: 1.5px solid var(--pine); background: #fff; object-fit: contain; }
-  #lightbox-close-btn { height: 40px; padding: 0 18px; background: var(--marigold); color: var(--pine); border: none; font-size: 12.5px; font-weight: 800; letter-spacing: .08em; }
+  /* ---------- Item detail modal ---------- */
+  .deal-row { cursor: pointer; }
+  #item-detail-image { width: 100%; height: 220px; background: var(--placeholder-bg); border: 1.5px solid var(--pine); background-size: cover; background-position: center; }
+  #item-detail-top-line { display: flex; align-items: center; gap: 6px; }
+  #item-detail-name { font-size: 21px; font-weight: 800; color: var(--ink); letter-spacing: -.02em; line-height: 1.2; }
+  #item-detail-category { font-size: 12px; font-weight: 700; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; }
+  #item-detail-price-row { display: flex; align-items: baseline; gap: 10px; }
+  #item-detail-price-flag { background: var(--marigold); padding: 6px 12px; display: flex; align-items: baseline; gap: 6px; }
+  #item-detail-cur-price { font-size: 28px; font-weight: 800; color: var(--pine); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  #item-detail-was-price { font-size: 15px; color: #8A6712; text-decoration: line-through; }
+  #item-detail-suffix { font-size: 13px; font-weight: 600; color: var(--meta); }
+  #item-detail-valid-row { display: flex; align-items: center; gap: 8px; }
+  #item-detail-list-btn { height: 48px; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -487,12 +495,35 @@
     </div>
   </div>
 
-  <!-- ============ Image lightbox ============ -->
-  <div class="sheet-overlay" id="image-lightbox-overlay" style="align-items: center; justify-content: center">
-    <div class="sheet-scrim" id="lightbox-scrim"></div>
-    <div id="lightbox-panel" role="dialog" aria-modal="true" aria-label="Item image">
-      <img id="lightbox-img" alt="">
-      <button id="lightbox-close-btn" type="button">✕ CLOSE</button>
+  <!-- ============ Item detail modal ============ -->
+  <div class="sheet-overlay" id="item-detail-overlay">
+    <div class="sheet-scrim" id="item-detail-scrim"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="item-detail-name">
+      <div class="sheet-header">
+        <div class="sheet-title">ITEM DETAIL</div>
+        <button class="sheet-close" id="item-detail-close-btn" type="button">CLOSE ✕</button>
+      </div>
+      <div class="sheet-body">
+        <div id="item-detail-image"></div>
+        <div id="item-detail-top-line">
+          <div class="mono-badge" id="item-detail-mono"></div>
+          <div class="merchant-name" id="item-detail-merchant"></div>
+        </div>
+        <div id="item-detail-name"></div>
+        <div id="item-detail-category"></div>
+        <div id="item-detail-price-row">
+          <div id="item-detail-price-flag">
+            <span id="item-detail-was-price"></span>
+            <span id="item-detail-cur-price"></span>
+          </div>
+          <span id="item-detail-suffix"></span>
+        </div>
+        <div id="item-detail-valid-row">
+          <div class="valid-label" id="item-detail-valid"></div>
+          <div class="ends-today-tag" id="item-detail-expiring" style="display: none">ENDS TODAY</div>
+        </div>
+        <button class="list-btn" id="item-detail-list-btn" type="button"></button>
+      </div>
     </div>
   </div>
 
@@ -515,6 +546,7 @@
   let currentTab = 'deals';
   let myList = loadMyList();
   let lastQuestion = '';
+  let currentAskSources = [];
 
   function loadMyList() {
     try { return JSON.parse(localStorage.getItem('groc_my_list') || '[]'); } catch (e) { return []; }
@@ -624,10 +656,9 @@
     const suffix = priceSuffixText(row);
     const listed = isListed(row);
     const bgStyle = row.cutout_image_url ? ' style="background-image: url(\'' + row.cutout_image_url.replace(/'/g, "%27") + '\')"' : '';
-    const imageAttr = row.cutout_image_url ? ' data-image-url="' + escapeHtml(row.cutout_image_url) + '"' : '';
     return (
       '<div class="deal-row" data-id="' + row.id + '">' +
-        '<div class="deal-image' + (opts.small ? ' small' : '') + '"' + bgStyle + imageAttr + '></div>' +
+        '<div class="deal-image' + (opts.small ? ' small' : '') + '"' + bgStyle + '></div>' +
         '<div class="deal-mid">' +
           '<div class="deal-top-line">' +
             '<div class="mono-badge">' + escapeHtml(storeInitials(row.merchant)) + '</div>' +
@@ -655,17 +686,25 @@
 
   function attachRowHandlers(container) {
     container.querySelectorAll('[data-action="list"]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const row = allResults.find(r => String(r.id) === btn.dataset.id);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // don't also trigger the row's open-detail click below
+        const row = findRowById(btn.dataset.id);
         if (row) { toggleListed(row); renderDeals(); renderMyList(); }
       });
     });
     container.querySelectorAll('[data-action="remove"]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
         myList = myList.filter(r => String(r.id) !== btn.dataset.id);
         saveMyList();
         renderMyList();
         renderDeals();
+      });
+    });
+    container.querySelectorAll('.deal-row').forEach(rowEl => {
+      rowEl.addEventListener('click', () => {
+        const row = findRowById(rowEl.dataset.id);
+        if (row) openItemDetail(row);
       });
     });
   }
@@ -1124,13 +1163,13 @@
       document.getElementById('ask-answer-section').classList.add('open');
       document.getElementById('ask-answer-text').textContent = data.answer || '';
       const sources = data.sources || [];
+      currentAskSources = sources;
       document.getElementById('ask-grounded-label').textContent = 'GROUNDED IN ' + sources.length + ' FLYER ITEM' + (sources.length === 1 ? '' : 'S');
       document.getElementById('ask-sources').innerHTML = sources.map(s => {
         const bgStyle = s.cutout_image_url ? ' style="background-image: url(\'' + s.cutout_image_url.replace(/'/g, "%27") + '\')"' : '';
-        const imageAttr = s.cutout_image_url ? ' data-image-url="' + escapeHtml(s.cutout_image_url) + '"' : '';
         return (
-          '<div class="ask-source-row">' +
-            '<div class="ask-source-image"' + bgStyle + imageAttr + '></div>' +
+          '<div class="ask-source-row" data-id="' + s.id + '">' +
+            '<div class="ask-source-image"' + bgStyle + '></div>' +
             '<div class="ask-source-mid">' +
               '<div class="ask-source-item">' + escapeHtml(s.item_name) + '</div>' +
               '<div class="ask-source-meta">' + escapeHtml(s.merchant) + ' · ' + (s.valid_to ? 'to ' + escapeHtml(s.valid_to.slice(0, 10)) : '') + '</div>' +
@@ -1142,6 +1181,12 @@
           '</div>'
         );
       }).join('');
+      document.querySelectorAll('.ask-source-row').forEach(rowEl => {
+        rowEl.addEventListener('click', () => {
+          const row = findRowById(rowEl.dataset.id);
+          if (row) openItemDetail(row);
+        });
+      });
     } catch (err) {
       document.getElementById('ask-thinking-section').classList.remove('open');
       document.getElementById('ask-answer-section').classList.add('open');
@@ -1165,28 +1210,74 @@
     }
   });
 
-  // ---------- Image lightbox ----------
-  function openLightbox(url) {
-    document.getElementById('lightbox-img').src = url;
-    const overlay = document.getElementById('image-lightbox-overlay');
+  // ---------- Item detail modal ----------
+  // Tapping anywhere on a deal row (Deals list or My List) opens this --
+  // bigger image, full item info, and the same +LIST/LISTED toggle as the
+  // row itself. Closing (X, tapping the dimmed background, or Escape) just
+  // removes the overlay -- the list underneath keeps whatever scroll
+  // position it was at, so "keep scrolling" after closing needs no special
+  // handling, it's just what happens by default.
+  let currentDetailRow = null;
+
+  function findRowById(id) {
+    return allResults.find(r => String(r.id) === String(id))
+      || myList.find(r => String(r.id) === String(id))
+      || currentAskSources.find(r => String(r.id) === String(id));
+  }
+
+  function renderItemDetail() {
+    const row = currentDetailRow;
+    if (!row) return;
+    const p = effectivePrice(row);
+    const suffix = priceSuffixText(row);
+
+    const imgEl = document.getElementById('item-detail-image');
+    imgEl.style.backgroundImage = row.cutout_image_url ? "url('" + row.cutout_image_url.replace(/'/g, '%27') + "')" : 'none';
+
+    document.getElementById('item-detail-mono').textContent = storeInitials(row.merchant);
+    document.getElementById('item-detail-merchant').textContent = row.merchant;
+    document.getElementById('item-detail-name').textContent = row.item_name;
+    document.getElementById('item-detail-category').textContent = row.category || '';
+    document.getElementById('item-detail-category').style.display = row.category ? 'block' : 'none';
+
+    document.getElementById('item-detail-was-price').textContent = row.was_price != null ? '$' + Number(row.was_price).toFixed(2) : '';
+    document.getElementById('item-detail-cur-price').textContent = priceText(row);
+    document.getElementById('item-detail-suffix').textContent = suffix;
+
+    document.getElementById('item-detail-valid').textContent = row.valid_to ? 'Valid to ' + row.valid_to.slice(0, 10) : '';
+    document.getElementById('item-detail-expiring').style.display = isExpiring(row) ? 'block' : 'none';
+
+    const listBtn = document.getElementById('item-detail-list-btn');
+    const listed = isListed(row);
+    listBtn.textContent = listed ? '✓ LISTED' : '+ LIST';
+    listBtn.classList.toggle('listed', listed);
+  }
+
+  function openItemDetail(row) {
+    currentDetailRow = row;
+    renderItemDetail();
+    const overlay = document.getElementById('item-detail-overlay');
     overlay.classList.add('open');
     trapFocusIn(overlay);
   }
-  function closeLightbox() {
-    const overlay = document.getElementById('image-lightbox-overlay');
+  function closeItemDetail() {
+    const overlay = document.getElementById('item-detail-overlay');
     overlay.classList.remove('open');
     releaseFocusTrap(overlay);
-    document.getElementById('lightbox-img').src = '';
+    currentDetailRow = null;
   }
-  document.getElementById('app').addEventListener('click', (e) => {
-    const el = e.target.closest('[data-image-url]');
-    if (el) openLightbox(el.dataset.imageUrl);
+  document.getElementById('item-detail-close-btn').addEventListener('click', closeItemDetail);
+  document.getElementById('item-detail-scrim').addEventListener('click', closeItemDetail);
+  document.getElementById('item-detail-list-btn').addEventListener('click', () => {
+    if (!currentDetailRow) return;
+    toggleListed(currentDetailRow);
+    renderItemDetail();
+    renderDeals();
+    renderMyList();
   });
-  document.getElementById('lightbox-close-btn').addEventListener('click', closeLightbox);
-  document.getElementById('lightbox-scrim').addEventListener('click', closeLightbox);
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    closeLightbox();
+    closeItemDetail();
     closeFilterSheet();
     closeAskSheet();
   });
