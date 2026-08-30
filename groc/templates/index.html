@@ -413,9 +413,9 @@
   <!-- ============ Filter sheet ============ -->
   <div class="sheet-overlay" id="filter-sheet-overlay">
     <div class="sheet-scrim"></div>
-    <div class="sheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="filter-sheet-title">
       <div class="sheet-header">
-        <div class="sheet-title">FILTER &amp; SORT</div>
+        <div class="sheet-title" id="filter-sheet-title">FILTER &amp; SORT</div>
         <button class="sheet-close" id="filter-sheet-done" type="button">DONE</button>
       </div>
       <div class="sheet-body">
@@ -445,9 +445,9 @@
   <!-- ============ Ask sheet ============ -->
   <div class="sheet-overlay" id="ask-sheet-overlay">
     <div class="sheet-scrim"></div>
-    <div class="sheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ask-sheet-title">
       <div class="sheet-header">
-        <div class="sheet-title">ASK GROC</div>
+        <div class="sheet-title" id="ask-sheet-title">ASK GROC</div>
         <button class="sheet-close" id="ask-sheet-close" type="button">CLOSE ✕</button>
       </div>
       <div class="sheet-body">
@@ -490,7 +490,7 @@
   <!-- ============ Image lightbox ============ -->
   <div class="sheet-overlay" id="image-lightbox-overlay" style="align-items: center; justify-content: center">
     <div class="sheet-scrim" id="lightbox-scrim"></div>
-    <div id="lightbox-panel">
+    <div id="lightbox-panel" role="dialog" aria-modal="true" aria-label="Item image">
       <img id="lightbox-img" alt="">
       <button id="lightbox-close-btn" type="button">✕ CLOSE</button>
     </div>
@@ -554,6 +554,67 @@
     const d = document.createElement('div');
     d.textContent = s == null ? '' : String(s);
     return d.innerHTML;
+  }
+
+  // ---------- Focus trap for sheet/lightbox overlays ----------
+  // Without this, opening a "modal" sheet left focus on the button that
+  // opened it (so a screen reader never announced the sheet opened at all)
+  // and Tab escaped straight through into the dimmed background content --
+  // confirmed via Playwright, not assumed: 15 Tabs from the Ask sheet landed
+  // outside it entirely.
+  const _focusTrapState = new WeakMap();
+
+  function visibleFocusables(overlayEl) {
+    const all = overlayEl.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    // getClientRects().length catches anything inside a display:none section
+    // (e.g. the Ask sheet's answer/thinking panels, hidden until answered) --
+    // offsetParent can't be used here since it's unreliable inside a
+    // position:fixed ancestor (our sheet overlays are all position:fixed).
+    return Array.from(all).filter(el => el.getClientRects().length > 0);
+  }
+
+  function trapFocusIn(overlayEl) {
+    const initial = visibleFocusables(overlayEl);
+    if (initial.length === 0) return;
+    const previouslyFocused = document.activeElement;
+
+    // Recomputed on every Tab press rather than captured once: the Ask
+    // sheet's visible content changes while it's open (prompts -> thinking
+    // -> answered, each with different buttons), so a "last element" fixed
+    // at open time goes stale and Tab escapes the trap once new content
+    // appears -- confirmed via Playwright before this fix.
+    function handleKeydown(e) {
+      if (e.key !== 'Tab') return;
+      const current = visibleFocusables(overlayEl);
+      if (current.length === 0) return;
+      const first = current[0];
+      const last = current[current.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    overlayEl.addEventListener('keydown', handleKeydown);
+    _focusTrapState.set(overlayEl, { handleKeydown, previouslyFocused });
+    initial[0].focus();
+  }
+
+  function releaseFocusTrap(overlayEl) {
+    const state = _focusTrapState.get(overlayEl);
+    if (!state) return;
+    overlayEl.removeEventListener('keydown', state.handleKeydown);
+    _focusTrapState.delete(overlayEl);
+    if (state.previouslyFocused && document.body.contains(state.previouslyFocused)) {
+      state.previouslyFocused.focus();
+    }
   }
 
   // ---------- Deal row rendering ----------
@@ -832,8 +893,17 @@
       renderDeals();
     });
   });
-  function openFilterSheet() { buildFilterSheetContents(); document.getElementById('filter-sheet-overlay').classList.add('open'); }
-  function closeFilterSheet() { document.getElementById('filter-sheet-overlay').classList.remove('open'); }
+  function openFilterSheet() {
+    buildFilterSheetContents();
+    const overlay = document.getElementById('filter-sheet-overlay');
+    overlay.classList.add('open');
+    trapFocusIn(overlay);
+  }
+  function closeFilterSheet() {
+    const overlay = document.getElementById('filter-sheet-overlay');
+    overlay.classList.remove('open');
+    releaseFocusTrap(overlay);
+  }
   document.getElementById('category-chip').addEventListener('click', openFilterSheet);
   document.getElementById('stores-chip').addEventListener('click', openFilterSheet);
   document.getElementById('sort-chip').addEventListener('click', openFilterSheet);
@@ -1003,9 +1073,15 @@
 
   // ---------- Ask sheet ----------
   function openAskSheet() {
-    document.getElementById('ask-sheet-overlay').classList.add('open');
+    const overlay = document.getElementById('ask-sheet-overlay');
+    overlay.classList.add('open');
+    trapFocusIn(overlay);
   }
-  function closeAskSheet() { document.getElementById('ask-sheet-overlay').classList.remove('open'); }
+  function closeAskSheet() {
+    const overlay = document.getElementById('ask-sheet-overlay');
+    overlay.classList.remove('open');
+    releaseFocusTrap(overlay);
+  }
   document.getElementById('ask-open-btn').addEventListener('click', openAskSheet);
   document.getElementById('ask-sheet-close').addEventListener('click', closeAskSheet);
   document.querySelector('#ask-sheet-overlay .sheet-scrim').addEventListener('click', closeAskSheet);
@@ -1092,10 +1168,14 @@
   // ---------- Image lightbox ----------
   function openLightbox(url) {
     document.getElementById('lightbox-img').src = url;
-    document.getElementById('image-lightbox-overlay').classList.add('open');
+    const overlay = document.getElementById('image-lightbox-overlay');
+    overlay.classList.add('open');
+    trapFocusIn(overlay);
   }
   function closeLightbox() {
-    document.getElementById('image-lightbox-overlay').classList.remove('open');
+    const overlay = document.getElementById('image-lightbox-overlay');
+    overlay.classList.remove('open');
+    releaseFocusTrap(overlay);
     document.getElementById('lightbox-img').src = '';
   }
   document.getElementById('app').addEventListener('click', (e) => {
