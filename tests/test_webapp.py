@@ -74,6 +74,22 @@ def test_index_page_loads(app_and_db):
     assert b"groc" in resp.data
 
 
+def test_api_search_works_against_a_completely_fresh_unmigrated_database():
+    # Regression: the web app used to only ever connect(), relying on some
+    # CLI command (scrape/scrape-tracked) having already run init_db() at
+    # some point. A schema change (tracked_postal_codes) 500'd in production
+    # because nothing had migrated it yet. The app must self-migrate.
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()  # deliberately no db.init_db() call -- an empty, schema-less file
+
+    app = create_app(db_path=tmp.name, chat_client=_FakeChatClient())
+    app.config["TESTING"] = True
+    resp = app.test_client().get("/api/search?postal_code=M5V2H1")
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"results": [], "has_more": False}
+
+
 def test_api_search_returns_matches(app_and_db):
     client = app_and_db.test_client()
     resp = client.get("/api/search?q=chicken")

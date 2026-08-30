@@ -31,7 +31,13 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
     app.config["CHAT_CLIENT"] = chat_client
 
     def _connect() -> sqlite3.Connection:
-        return db.connect(app.config["DB_PATH"])
+        # init_db() every connection (not just from the CLI's scrape commands)
+        # so a schema change (e.g. a new table) doesn't 500 in production
+        # until someone remembers to run a migration by hand -- exactly what
+        # happened with tracked_postal_codes. Cheap: idempotent DDL only.
+        conn = db.connect(app.config["DB_PATH"])
+        db.init_db(conn)
+        return conn
 
     @app.get("/")
     def index():
