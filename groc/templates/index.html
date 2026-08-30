@@ -421,10 +421,10 @@
       <div class="sheet-body">
         <div class="field-group" style="gap: 8px">
           <div class="footer-label">SORT BY</div>
-          <div class="segmented">
-            <button class="segment active" data-sort="price" type="button">PRICE</button>
-            <button class="segment" data-sort="store" type="button">STORE</button>
-            <button class="segment" data-sort="expiring" type="button">EXPIRING</button>
+          <div class="segmented" role="radiogroup" aria-label="Sort by">
+            <button class="segment active" data-sort="price" type="button" role="radio" aria-checked="true">PRICE</button>
+            <button class="segment" data-sort="store" type="button" role="radio" aria-checked="false">STORE</button>
+            <button class="segment" data-sort="expiring" type="button" role="radio" aria-checked="false">EXPIRING</button>
           </div>
         </div>
         <div class="field-group" style="gap: 8px">
@@ -625,6 +625,24 @@
     return rows;
   }
 
+  function dedupeIdenticalItems(rows) {
+    // Real production data: the same store can have two different active
+    // flyers (e.g. a general grocery flyer and a themed one) featuring the
+    // same item at the same price -- technically correct, but showing
+    // "Food Basics -- Selection Cereals -- $4.97" twice in a row reads as a
+    // glitch, since there's no user-relevant difference between the two
+    // rows. Collapse to one, keeping whichever stays valid longest.
+    const seen = new Map();
+    for (const row of rows) {
+      const key = row.merchant + '||' + row.item_name.toLowerCase() + '||' + effectivePrice(row);
+      const existing = seen.get(key);
+      if (!existing || new Date(row.valid_to || 0) > new Date(existing.valid_to || 0)) {
+        seen.set(key, row);
+      }
+    }
+    return Array.from(seen.values());
+  }
+
   function sortRows(rows) {
     const copy = rows.slice();
     if (sortMode === 'store') {
@@ -646,7 +664,7 @@
   }
 
   function renderDeals() {
-    const matched = matchingRows();
+    const matched = dedupeIdenticalItems(matchingRows());
     const sorted = sortRows(matched);
     const bestOn = document.getElementById('best-per-merchant').checked;
     const shown = bestOn ? bestPerMerchant(sorted) : sorted;
@@ -763,7 +781,7 @@
     allResults.forEach(r => categoriesOf(r).forEach(c => categories.add(c)));
     const catEl = document.getElementById('category-chips');
     catEl.innerHTML = Array.from(categories).sort().map(c =>
-      '<button class="category-chip' + (selectedCategories.has(c) ? ' selected' : '') + '" data-category="' + escapeHtml(c) + '" type="button">' +
+      '<button class="category-chip' + (selectedCategories.has(c) ? ' selected' : '') + '" data-category="' + escapeHtml(c) + '" type="button" aria-pressed="' + selectedCategories.has(c) + '">' +
         escapeHtml(c) + (selectedCategories.has(c) ? ' ✓' : '') + '</button>'
     ).join('');
     catEl.querySelectorAll('.category-chip').forEach(btn => {
@@ -807,7 +825,10 @@
   document.querySelectorAll('.segment').forEach(btn => {
     btn.addEventListener('click', () => {
       sortMode = btn.dataset.sort;
-      document.querySelectorAll('.segment').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.segment').forEach(b => {
+        b.classList.toggle('active', b === btn);
+        b.setAttribute('aria-checked', String(b === btn));
+      });
       renderDeals();
     });
   });
