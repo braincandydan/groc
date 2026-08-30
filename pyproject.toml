@@ -7,6 +7,12 @@ dependencies = [
     "requests>=2.31",
     "anthropic",
     "flask>=3.0",
+    # Unconditional (not an optional extra) because Vercel installs from
+    # pyproject.toml's main dependency list, ignoring requirements.txt when
+    # both exist -- an optional 'postgres' extra here was silently never
+    # installed on Vercel, causing "ModuleNotFoundError: No module named
+    # 'psycopg'" in production despite requirements.txt listing it correctly.
+    "psycopg[binary]>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -15,9 +21,6 @@ dev = [
 ]
 prod = [
     "gunicorn>=22.0",
-]
-postgres = [
-    "psycopg[binary]>=3.1",
 ]
 
 [project.scripts]

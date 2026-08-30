@@ -124,9 +124,9 @@ To deploy:
    own machine or existing cron setup, point the same CLI at the hosted DB
    using the connection string from step 1:
    ```bash
-   pip install -e ".[postgres]"
    python -m groc.cli scrape -p M5V2H1 --db "postgresql://...(from Vercel/Neon)..."
    ```
+   (`psycopg` is an unconditional dependency, installed by the normal `pip install -e ".[dev]"` from Setup above — no separate extra needed.)
    Re-run this on a schedule (e.g. your existing local cron) to keep data
    fresh; the deployed web app just reads whatever's in that database.
 
