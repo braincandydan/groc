@@ -179,6 +179,31 @@ def test_api_search_tracks_the_postal_code_even_with_no_data(app_and_db):
     assert "X1Y2Z3" in db.list_tracked_postal_codes(conn)
 
 
+def test_api_search_triggers_immediate_scrape_only_on_first_search_of_a_postal_code(app_and_db, monkeypatch):
+    calls = []
+    monkeypatch.setattr("groc.webapp.trigger_scrape_now", lambda postal_code: calls.append(postal_code))
+
+    client = app_and_db.test_client()
+    client.get("/api/search?postal_code=X1Y2Z3")
+    client.get("/api/search?postal_code=X1Y2Z3")  # searched again -- already tracked, shouldn't re-trigger
+    client.get("/api/search?postal_code=X1Y2Z3")
+
+    assert calls == ["X1Y2Z3"]
+
+
+def test_api_search_does_not_trigger_for_an_already_tracked_postal_code(app_and_db, monkeypatch):
+    conn = db.connect(app_and_db.config["DB_PATH"])
+    db.track_postal_code(conn, "M5V2H1")  # pre-track it, simulating an earlier search
+
+    calls = []
+    monkeypatch.setattr("groc.webapp.trigger_scrape_now", lambda postal_code: calls.append(postal_code))
+
+    client = app_and_db.test_client()
+    client.get("/api/search?postal_code=M5V2H1")
+
+    assert calls == []
+
+
 def test_api_ask_returns_answer_and_sources(app_and_db):
     client = app_and_db.test_client()
     resp = client.post("/api/ask", json={"question": "what's the best deal on chicken breast"})

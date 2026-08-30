@@ -9,6 +9,7 @@ from werkzeug.exceptions import HTTPException
 
 from . import db
 from .chat import ask as chat_ask
+from .github_trigger import trigger_scrape_now
 from .search import best_by_merchant, search_items
 
 
@@ -65,8 +66,14 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         if postal_code:
             # Lets the scheduled scraper (groc scrape-tracked) pick up a
             # postal code the next time it runs, even if it has zero data
-            # right now -- see docs/PROJECT_PLAN.md Phase 5.
-            db.track_postal_code(conn, postal_code)
+            # right now -- see docs/PROJECT_PLAN.md Phase 5. Only the first
+            # time a postal code is seen (track_postal_code returns True)
+            # also asks the workflow to run right now instead of waiting for
+            # the next scheduled tick -- every later search of the same
+            # still-empty postal code is a no-op here, so this can't pile up
+            # duplicate runs.
+            if db.track_postal_code(conn, postal_code):
+                trigger_scrape_now(postal_code)
         rows = search_items(conn, query, postal_code=postal_code, limit=limit, offset=offset)
         # Whether the client might need another page -- best_per_merchant
         # collapses rows *after* this check, since it answers "was this page

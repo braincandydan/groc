@@ -129,6 +129,18 @@ def test_track_postal_code_is_idempotent():
     assert rows[0]["last_scraped_at"] is None
 
 
+def test_track_postal_code_returns_true_only_the_first_time():
+    # A caller (webapp.py) uses this to decide whether to trigger an
+    # immediate scrape -- it must be True exactly once per postal code, not
+    # on every repeated search of the same one.
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    assert db.track_postal_code(conn, "M5V2H1") is True
+    assert db.track_postal_code(conn, "M5V2H1") is False
+    assert db.track_postal_code(conn, "M5V2H1") is False
+
+
 def test_list_tracked_postal_codes_returns_sorted():
     conn = db.connect(":memory:")
     db.init_db(conn)

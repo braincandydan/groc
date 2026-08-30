@@ -247,18 +247,27 @@ def upsert_items(conn, rows: Iterable[dict]) -> int:
 _TRACK_POSTAL_CODE_SQL = """
 INSERT INTO tracked_postal_codes (postal_code, first_requested_at, last_scraped_at)
 VALUES (:postal_code, :first_requested_at, NULL)
-ON CONFLICT (postal_code) DO NOTHING;
+ON CONFLICT (postal_code) DO NOTHING
+RETURNING postal_code;
 """
 
 
-def track_postal_code(conn, postal_code: str) -> None:
+def track_postal_code(conn, postal_code: str) -> bool:
     """Record that a postal code has been requested, so a scheduled job can pick it up.
 
     A no-op if it's already tracked -- this is called on every search, not just
-    the first time, so it has to stay cheap and idempotent.
+    the first time, so it has to stay cheap and idempotent. Returns True only
+    when this postal code was newly recorded (not already tracked), so a
+    caller can decide whether to kick off an immediate scrape instead of
+    waiting for the next scheduled run -- verified identical on SQLite and
+    Postgres via INSERT ... ON CONFLICT DO NOTHING RETURNING, which is a more
+    reliable way to detect "did this insert actually happen" across both
+    backends than relying on cursor.rowcount semantics.
     """
-    conn.execute(_TRACK_POSTAL_CODE_SQL, {"postal_code": postal_code, "first_requested_at": utcnow_iso()})
+    cur = conn.execute(_TRACK_POSTAL_CODE_SQL, {"postal_code": postal_code, "first_requested_at": utcnow_iso()})
+    inserted = cur.fetchone() is not None
     conn.commit()
+    return inserted
 
 
 def list_tracked_postal_codes(conn) -> list[str]:

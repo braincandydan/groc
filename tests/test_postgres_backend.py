@@ -180,6 +180,15 @@ def test_track_postal_code_on_conflict_do_nothing_against_postgres(pg_conn):
     assert db.list_tracked_postal_codes(pg_conn) == ["M5V2H1"]
 
 
+def test_track_postal_code_returns_true_only_once_against_postgres(pg_conn):
+    # The RETURNING-based "was this newly inserted" check -- confirmed
+    # working identically on SQLite before writing this, but worth locking
+    # in against real Postgres given this session's history of SQL that
+    # parses on both but behaves differently.
+    assert db.track_postal_code(pg_conn, "M5V2H1") is True
+    assert db.track_postal_code(pg_conn, "M5V2H1") is False
+
+
 def test_mark_postal_code_scraped_against_postgres(pg_conn):
     db.track_postal_code(pg_conn, "M5V2H1")
     db.mark_postal_code_scraped(pg_conn, "M5V2H1", "2026-08-30T06:00:00+00:00")

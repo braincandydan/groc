@@ -187,6 +187,25 @@ gh secret set DATABASE_URL --body "postgresql://...(from Vercel/Neon)..."
 Trigger it manually to test before waiting for the schedule: Actions tab →
 "Scheduled flyer scrape" → Run workflow.
 
+**Cutting the wait further**: the first search of a brand-new postal code
+also asks the workflow to run *immediately* instead of waiting for the next
+scheduled tick (`groc/github_trigger.py`, called from `/api/search`) — a
+search still can't wait for the scrape itself (same 30-90+ second problem),
+but it doesn't have to wait a full day for the next scheduled run either.
+Only the first search of a given postal code triggers this; every repeat
+search of the same still-empty postal code is a no-op, so it can't pile up
+duplicate runs.
+
+**One-time setup** for this part: create a
+[fine-grained personal access token](https://github.com/settings/tokens?type=beta)
+scoped to just this repository with **Actions: Read and write** permission
+(don't reuse a broad personal-account token here — this one gets deployed to
+production). Add it as a Vercel environment variable named
+`GH_DISPATCH_TOKEN` (Project Settings → Environment Variables), then
+redeploy. Without it, `trigger_scrape_now()` just logs and no-ops — the
+daily schedule still covers everything, this only makes new postal codes
+faster.
+
 ## Database schema
 
 `flyer_items` table (SQLite, see `groc/db.py`):
