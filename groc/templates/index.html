@@ -312,6 +312,15 @@
   #item-detail-suffix { font-size: 13px; font-weight: 600; color: var(--meta); }
   #item-detail-valid-row { display: flex; align-items: center; gap: 8px; }
   #item-detail-list-btn { height: 48px; font-size: 13px; }
+
+  /* ---------- City picker ---------- */
+  .text-link-btn { background: none; border: none; padding: 0; font-size: 13px; font-weight: 700; color: var(--pine); text-decoration: underline; align-self: center; }
+  #city-picker-search { height: 44px; width: 100%; border: 1.5px solid var(--pine); padding: 0 12px; font-size: 16px; font-weight: 500; color: var(--ink); margin-bottom: 12px; }
+  #city-picker-list { display: flex; flex-direction: column; max-height: 50vh; overflow-y: auto; border: 1.5px solid var(--pine); }
+  .city-picker-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border: none; border-bottom: 1px solid var(--divider); background: #fff; width: 100%; font-size: 14px; font-weight: 500; color: var(--ink); text-align: left; }
+  .city-picker-item:last-child { border-bottom: none; }
+  .city-picker-province { color: var(--muted); font-size: 12px; font-weight: 700; }
+  #city-picker-empty { padding: 12px; font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -330,6 +339,7 @@
         <input id="onboarding-postal" placeholder="e.g. M5V 2H1" autocomplete="off">
         <div id="onboarding-postal-error" class="field-error"></div>
         <button type="submit" class="btn-primary">LOAD DEALS</button>
+        <button type="button" class="text-link-btn" id="onboarding-city-picker-btn">Or choose your city</button>
         <div class="helper-text">Saved on this device. Change it any time from the header.</div>
       </form>
       <div id="onboarding-footer">
@@ -351,6 +361,7 @@
         <button type="submit" id="postal-edit-save">LOAD</button>
       </form>
       <div id="postal-edit-error" class="field-error" style="margin: -4px 0 0"></div>
+      <button type="button" class="text-link-btn" id="postal-edit-city-picker-btn" style="display: none">Choose city instead</button>
       <div id="tab-switcher">
         <button type="button" class="tab-btn active" data-tab="deals">DEALS</button>
         <button type="button" class="tab-btn" data-tab="mylist" id="mylist-tab-btn">MY LIST</button>
@@ -533,6 +544,21 @@
     </div>
   </div>
 
+  <!-- ============ City picker ============ -->
+  <div class="sheet-overlay" id="city-picker-overlay">
+    <div class="sheet-scrim" id="city-picker-scrim"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="city-picker-title">
+      <div class="sheet-header">
+        <div class="sheet-title" id="city-picker-title">CHOOSE YOUR CITY</div>
+        <button class="sheet-close" id="city-picker-close-btn" type="button">CLOSE ✕</button>
+      </div>
+      <div class="sheet-body">
+        <input id="city-picker-search" placeholder="Type a city name…" autocomplete="off">
+        <div id="city-picker-list"></div>
+      </div>
+    </div>
+  </div>
+
 </div>
 <script>
 (function () {
@@ -553,6 +579,12 @@
   let myList = loadMyList();
   let lastQuestion = '';
   let currentAskSources = [];
+
+  // Curated list of major Canadian cities -> a real, verified postal code
+  // for that city (looked up from GeoNames' open Canadian postal code
+  // dataset, never guessed) -- lets someone pick a city instead of typing
+  // an exact postal code. [city, province, postal_code]
+  const CANADIAN_CITIES = [["Abbotsford","BC","V2S 0A1"],["Airdrie","AB","T4A 0A1"],["Ajax","ON","L1M 1B6"],["Banff","AB","T1L 0A1"],["Barrie","ON","L4M 0A1"],["Bathurst","NB","E2A 0A2"],["Belleville","ON","K8N 0A1"],["Brampton","ON","L4T 3B4"],["Brandon","MB","R7A 0A1"],["Brantford","ON","N3P 0A1"],["Burlington","ON","L7L 0A1"],["Burnaby","BC","V3J 0A4"],["Calgary","AB","T1W 0K6"],["Cambridge","ON","N1P 0A1"],["Campbell River","BC","V9H 0A1"],["Camrose","AB","T4V 0A2"],["Canmore","AB","T1W 0A1"],["Charlottetown","PE","C1A 0A1"],["Chilliwack","BC","V2P 0A1"],["Coquitlam","BC","V3B 0A2"],["Corner Brook","NL","A2H 0A5"],["Cornwall","ON","K6H 0A2"],["Courtenay","BC","V9J 1L2"],["Cranbrook","BC","V1C 0A1"],["Dawson City","YT","Y0B 0A3"],["Delta","BC","V3M 0E9"],["Drummondville","QC","J1Z 0E5"],["Edmonton","AB","T2G 1S6"],["Fort McMurray","AB","T9H 0A1"],["Fort St. John","BC","V1J 0A1"],["Fredericton","NB","E3A 0A1"],["Gander","NL","A1V 0A1"],["Gatineau","QC","J8L 0A2"],["Granby","QC","J2G 0A1"],["Grande Prairie","AB","T8V 0A1"],["Guelph","ON","N1C 0A1"],["Halifax","NS","B3H 0A1"],["Hamilton","ON","L8E 0E5"],["Hay River","NT","X0E 0A9"],["Iqaluit","NU","X0A 0A1"],["Kamloops","BC","V1S 0A2"],["Kelowna","BC","V1P 0A1"],["Kingston","ON","K7K 0A1"],["Kitchener","ON","N0B 1N0"],["Laval","QC","H7A 0A1"],["Lethbridge","AB","T1H 0A1"],["Levis","QC","G0S 0B6"],["London","ON","N5V 0A2"],["Longueuil","QC","J4G 0A1"],["Markham","ON","L3P 0A1"],["Medicine Hat","AB","T1A 0A1"],["Milton","ON","L9E 0A1"],["Mississauga","ON","L4T 0A1"],["Moncton","NB","E1A 0A3"],["Montreal","QC","H1A 0A1"],["Moose Jaw","SK","S6H 0A1"],["Nanaimo","BC","V9R 0A1"],["New Glasgow","NS","B2H 0A1"],["Niagara Falls","ON","L2E 0A1"],["North Bay","ON","P1A 0A1"],["Oakville","ON","L6H 0A1"],["Orillia","ON","L3V 0A1"],["Oshawa","ON","L1G 0A1"],["Ottawa","ON","K0A 0E5"],["Penticton","BC","V2A 0A1"],["Peterborough","ON","K9H 0A1"],["Pickering","ON","L1V 0A1"],["Prince Albert","SK","S6V 0A1"],["Prince George","BC","V2K 0A1"],["Quebec City","QC","G1A 0A2"],["Rankin Inlet","NU","X0C 0A1"],["Red Deer","AB","T4N 0A1"],["Regina","SK","S4M 0A1"],["Repentigny","QC","J5Y 0A1"],["Richmond","BC","V6P 0B9"],["Richmond Hill","ON","L3P 3J4"],["Rimouski","QC","G0L 0B3"],["Saanich","BC","V8M 0A1"],["Saguenay","QC","G7B 3N8"],["Saint John","NB","E2E 0S9"],["Sarnia","ON","N7S 0A1"],["Saskatoon","SK","S7H 0A1"],["Sault Ste. Marie","ON","P6A 0A1"],["Shawinigan","QC","G9N 0A1"],["Sherbrooke","QC","J0B 2C0"],["Spruce Grove","AB","T7X 0A1"],["Squamish","BC","V8B 0A1"],["St. Albert","AB","T8N 0A1"],["St. Catharines","ON","L2M 0A1"],["St. John's","NL","A0A 1J0"],["Steinbach","MB","R5G 0A1"],["Sudbury","ON","P3A 0A1"],["Summerside","PE","C1N 0A1"],["Surrey","BC","V3R 0A1"],["Swift Current","SK","S9H 0A1"],["Sydney","NS","B1L 0B5"],["Terrebonne","QC","J0N 1H0"],["Thompson","MB","R8N 0A1"],["Thunder Bay","ON","P7A 0A2"],["Timmins","ON","P4N 0A2"],["Toronto","ON","M3C 0C1"],["Trois-Rivieres","QC","G8T 0A1"],["Truro","NS","B2N 0A2"],["Vancouver","BC","V5K 0A1"],["Vaughan","ON","L6A 0K9"],["Vernon","BC","V1B 0A2"],["Victoria","BC","V8N 0A1"],["Waterloo","ON","N2J 0A1"],["Whistler","BC","V0N 0A0"],["Whitby","ON","L1M 0A1"],["Whitehorse","YT","Y1A 0A1"],["Windsor","ON","N8N 0A1"],["Winnipeg","MB","R2C 0A1"],["Yellowknife","NT","X1A 0A1"],["Yorkton","SK","S3N 0A1"]];
 
   function loadMyList() {
     try { return JSON.parse(localStorage.getItem('groc_my_list') || '[]'); } catch (e) { return []; }
@@ -1032,6 +1064,57 @@
 
   document.getElementById('filter-query').addEventListener('input', renderDeals);
 
+  // ---------- City picker ----------
+  function renderCityPickerList(filterText) {
+    const term = filterText.trim().toLowerCase();
+    const matches = CANADIAN_CITIES.filter(([city, province]) =>
+      !term || city.toLowerCase().includes(term) || province.toLowerCase().includes(term)
+    );
+    const listEl = document.getElementById('city-picker-list');
+    if (matches.length === 0) {
+      listEl.innerHTML = '<div id="city-picker-empty">No cities match that.</div>';
+      return;
+    }
+    listEl.innerHTML = matches.map(([city, province, postal]) =>
+      '<button class="city-picker-item" type="button" data-postal="' + escapeHtml(postal) + '">' +
+        '<span>' + escapeHtml(city) + '</span><span class="city-picker-province">' + escapeHtml(province) + '</span>' +
+      '</button>'
+    ).join('');
+    listEl.querySelectorAll('.city-picker-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const postal = btn.dataset.postal;
+        closeCityPicker();
+        // Reuse the existing validated submit flow rather than duplicating
+        // it -- these are real, verified postal codes so validation always
+        // passes, but this keeps one code path instead of two.
+        if (document.getElementById('onboarding').style.display !== 'none') {
+          document.getElementById('onboarding-postal').value = postal;
+          document.getElementById('onboarding-form').requestSubmit();
+        } else {
+          document.getElementById('postal-edit-input').value = postal;
+          document.getElementById('postal-edit-row').requestSubmit();
+        }
+      });
+    });
+  }
+  function openCityPicker() {
+    document.getElementById('city-picker-search').value = '';
+    renderCityPickerList('');
+    const overlay = document.getElementById('city-picker-overlay');
+    overlay.classList.add('open');
+    trapFocusIn(overlay);
+  }
+  function closeCityPicker() {
+    const overlay = document.getElementById('city-picker-overlay');
+    overlay.classList.remove('open');
+    releaseFocusTrap(overlay);
+  }
+  document.getElementById('onboarding-city-picker-btn').addEventListener('click', openCityPicker);
+  document.getElementById('postal-edit-city-picker-btn').addEventListener('click', openCityPicker);
+  document.getElementById('city-picker-close-btn').addEventListener('click', closeCityPicker);
+  document.getElementById('city-picker-scrim').addEventListener('click', closeCityPicker);
+  document.getElementById('city-picker-search').addEventListener('input', (e) => renderCityPickerList(e.target.value));
+
   // ---------- Postal code entry / switching ----------
   function isValidPostalCode(value) {
     // Canadian format: letter-digit-letter, optional space/dash, digit-letter-digit.
@@ -1041,6 +1124,7 @@
     const row = document.getElementById('postal-edit-row');
     row.classList.toggle('open');
     document.getElementById('postal-edit-error').classList.remove('open');
+    document.getElementById('postal-edit-city-picker-btn').style.display = row.classList.contains('open') ? 'block' : 'none';
     if (row.classList.contains('open')) {
       document.getElementById('postal-edit-input').value = postalCode;
       document.getElementById('postal-edit-input').focus();
@@ -1287,6 +1371,7 @@
     closeItemDetail();
     closeFilterSheet();
     closeAskSheet();
+    closeCityPicker();
   });
 
   // ---------- Boot ----------

@@ -1,0 +1,577 @@
+[
+  {
+    "city": "Abbotsford",
+    "province": "BC",
+    "postal_code": "V2S 0A1"
+  },
+  {
+    "city": "Airdrie",
+    "province": "AB",
+    "postal_code": "T4A 0A1"
+  },
+  {
+    "city": "Ajax",
+    "province": "ON",
+    "postal_code": "L1M 1B6"
+  },
+  {
+    "city": "Banff",
+    "province": "AB",
+    "postal_code": "T1L 0A1"
+  },
+  {
+    "city": "Barrie",
+    "province": "ON",
+    "postal_code": "L4M 0A1"
+  },
+  {
+    "city": "Bathurst",
+    "province": "NB",
+    "postal_code": "E2A 0A2"
+  },
+  {
+    "city": "Belleville",
+    "province": "ON",
+    "postal_code": "K8N 0A1"
+  },
+  {
+    "city": "Brampton",
+    "province": "ON",
+    "postal_code": "L4T 3B4"
+  },
+  {
+    "city": "Brandon",
+    "province": "MB",
+    "postal_code": "R7A 0A1"
+  },
+  {
+    "city": "Brantford",
+    "province": "ON",
+    "postal_code": "N3P 0A1"
+  },
+  {
+    "city": "Burlington",
+    "province": "ON",
+    "postal_code": "L7L 0A1"
+  },
+  {
+    "city": "Burnaby",
+    "province": "BC",
+    "postal_code": "V3J 0A4"
+  },
+  {
+    "city": "Calgary",
+    "province": "AB",
+    "postal_code": "T1W 0K6"
+  },
+  {
+    "city": "Cambridge",
+    "province": "ON",
+    "postal_code": "N1P 0A1"
+  },
+  {
+    "city": "Campbell River",
+    "province": "BC",
+    "postal_code": "V9H 0A1"
+  },
+  {
+    "city": "Camrose",
+    "province": "AB",
+    "postal_code": "T4V 0A2"
+  },
+  {
+    "city": "Canmore",
+    "province": "AB",
+    "postal_code": "T1W 0A1"
+  },
+  {
+    "city": "Charlottetown",
+    "province": "PE",
+    "postal_code": "C1A 0A1"
+  },
+  {
+    "city": "Chilliwack",
+    "province": "BC",
+    "postal_code": "V2P 0A1"
+  },
+  {
+    "city": "Coquitlam",
+    "province": "BC",
+    "postal_code": "V3B 0A2"
+  },
+  {
+    "city": "Corner Brook",
+    "province": "NL",
+    "postal_code": "A2H 0A5"
+  },
+  {
+    "city": "Cornwall",
+    "province": "ON",
+    "postal_code": "K6H 0A2"
+  },
+  {
+    "city": "Courtenay",
+    "province": "BC",
+    "postal_code": "V9J 1L2"
+  },
+  {
+    "city": "Cranbrook",
+    "province": "BC",
+    "postal_code": "V1C 0A1"
+  },
+  {
+    "city": "Dawson City",
+    "province": "YT",
+    "postal_code": "Y0B 0A3"
+  },
+  {
+    "city": "Delta",
+    "province": "BC",
+    "postal_code": "V3M 0E9"
+  },
+  {
+    "city": "Drummondville",
+    "province": "QC",
+    "postal_code": "J1Z 0E5"
+  },
+  {
+    "city": "Edmonton",
+    "province": "AB",
+    "postal_code": "T2G 1S6"
+  },
+  {
+    "city": "Fort McMurray",
+    "province": "AB",
+    "postal_code": "T9H 0A1"
+  },
+  {
+    "city": "Fort St. John",
+    "province": "BC",
+    "postal_code": "V1J 0A1"
+  },
+  {
+    "city": "Fredericton",
+    "province": "NB",
+    "postal_code": "E3A 0A1"
+  },
+  {
+    "city": "Gander",
+    "province": "NL",
+    "postal_code": "A1V 0A1"
+  },
+  {
+    "city": "Gatineau",
+    "province": "QC",
+    "postal_code": "J8L 0A2"
+  },
+  {
+    "city": "Granby",
+    "province": "QC",
+    "postal_code": "J2G 0A1"
+  },
+  {
+    "city": "Grande Prairie",
+    "province": "AB",
+    "postal_code": "T8V 0A1"
+  },
+  {
+    "city": "Guelph",
+    "province": "ON",
+    "postal_code": "N1C 0A1"
+  },
+  {
+    "city": "Halifax",
+    "province": "NS",
+    "postal_code": "B3H 0A1"
+  },
+  {
+    "city": "Hamilton",
+    "province": "ON",
+    "postal_code": "L8E 0E5"
+  },
+  {
+    "city": "Hay River",
+    "province": "NT",
+    "postal_code": "X0E 0A9"
+  },
+  {
+    "city": "Iqaluit",
+    "province": "NU",
+    "postal_code": "X0A 0A1"
+  },
+  {
+    "city": "Kamloops",
+    "province": "BC",
+    "postal_code": "V1S 0A2"
+  },
+  {
+    "city": "Kelowna",
+    "province": "BC",
+    "postal_code": "V1P 0A1"
+  },
+  {
+    "city": "Kingston",
+    "province": "ON",
+    "postal_code": "K7K 0A1"
+  },
+  {
+    "city": "Kitchener",
+    "province": "ON",
+    "postal_code": "N0B 1N0"
+  },
+  {
+    "city": "Laval",
+    "province": "QC",
+    "postal_code": "H7A 0A1"
+  },
+  {
+    "city": "Lethbridge",
+    "province": "AB",
+    "postal_code": "T1H 0A1"
+  },
+  {
+    "city": "Levis",
+    "province": "QC",
+    "postal_code": "G0S 0B6"
+  },
+  {
+    "city": "London",
+    "province": "ON",
+    "postal_code": "N5V 0A2"
+  },
+  {
+    "city": "Longueuil",
+    "province": "QC",
+    "postal_code": "J4G 0A1"
+  },
+  {
+    "city": "Markham",
+    "province": "ON",
+    "postal_code": "L3P 0A1"
+  },
+  {
+    "city": "Medicine Hat",
+    "province": "AB",
+    "postal_code": "T1A 0A1"
+  },
+  {
+    "city": "Milton",
+    "province": "ON",
+    "postal_code": "L9E 0A1"
+  },
+  {
+    "city": "Mississauga",
+    "province": "ON",
+    "postal_code": "L4T 0A1"
+  },
+  {
+    "city": "Moncton",
+    "province": "NB",
+    "postal_code": "E1A 0A3"
+  },
+  {
+    "city": "Montreal",
+    "province": "QC",
+    "postal_code": "H1A 0A1"
+  },
+  {
+    "city": "Moose Jaw",
+    "province": "SK",
+    "postal_code": "S6H 0A1"
+  },
+  {
+    "city": "Nanaimo",
+    "province": "BC",
+    "postal_code": "V9R 0A1"
+  },
+  {
+    "city": "New Glasgow",
+    "province": "NS",
+    "postal_code": "B2H 0A1"
+  },
+  {
+    "city": "Niagara Falls",
+    "province": "ON",
+    "postal_code": "L2E 0A1"
+  },
+  {
+    "city": "North Bay",
+    "province": "ON",
+    "postal_code": "P1A 0A1"
+  },
+  {
+    "city": "Oakville",
+    "province": "ON",
+    "postal_code": "L6H 0A1"
+  },
+  {
+    "city": "Orillia",
+    "province": "ON",
+    "postal_code": "L3V 0A1"
+  },
+  {
+    "city": "Oshawa",
+    "province": "ON",
+    "postal_code": "L1G 0A1"
+  },
+  {
+    "city": "Ottawa",
+    "province": "ON",
+    "postal_code": "K0A 0E5"
+  },
+  {
+    "city": "Penticton",
+    "province": "BC",
+    "postal_code": "V2A 0A1"
+  },
+  {
+    "city": "Peterborough",
+    "province": "ON",
+    "postal_code": "K9H 0A1"
+  },
+  {
+    "city": "Pickering",
+    "province": "ON",
+    "postal_code": "L1V 0A1"
+  },
+  {
+    "city": "Prince Albert",
+    "province": "SK",
+    "postal_code": "S6V 0A1"
+  },
+  {
+    "city": "Prince George",
+    "province": "BC",
+    "postal_code": "V2K 0A1"
+  },
+  {
+    "city": "Quebec City",
+    "province": "QC",
+    "postal_code": "G1A 0A2"
+  },
+  {
+    "city": "Rankin Inlet",
+    "province": "NU",
+    "postal_code": "X0C 0A1"
+  },
+  {
+    "city": "Red Deer",
+    "province": "AB",
+    "postal_code": "T4N 0A1"
+  },
+  {
+    "city": "Regina",
+    "province": "SK",
+    "postal_code": "S4M 0A1"
+  },
+  {
+    "city": "Repentigny",
+    "province": "QC",
+    "postal_code": "J5Y 0A1"
+  },
+  {
+    "city": "Richmond",
+    "province": "BC",
+    "postal_code": "V6P 0B9"
+  },
+  {
+    "city": "Richmond Hill",
+    "province": "ON",
+    "postal_code": "L3P 3J4"
+  },
+  {
+    "city": "Rimouski",
+    "province": "QC",
+    "postal_code": "G0L 0B3"
+  },
+  {
+    "city": "Saanich",
+    "province": "BC",
+    "postal_code": "V8M 0A1"
+  },
+  {
+    "city": "Saguenay",
+    "province": "QC",
+    "postal_code": "G7B 3N8"
+  },
+  {
+    "city": "Saint John",
+    "province": "NB",
+    "postal_code": "E2E 0S9"
+  },
+  {
+    "city": "Sarnia",
+    "province": "ON",
+    "postal_code": "N7S 0A1"
+  },
+  {
+    "city": "Saskatoon",
+    "province": "SK",
+    "postal_code": "S7H 0A1"
+  },
+  {
+    "city": "Sault Ste. Marie",
+    "province": "ON",
+    "postal_code": "P6A 0A1"
+  },
+  {
+    "city": "Shawinigan",
+    "province": "QC",
+    "postal_code": "G9N 0A1"
+  },
+  {
+    "city": "Sherbrooke",
+    "province": "QC",
+    "postal_code": "J0B 2C0"
+  },
+  {
+    "city": "Spruce Grove",
+    "province": "AB",
+    "postal_code": "T7X 0A1"
+  },
+  {
+    "city": "Squamish",
+    "province": "BC",
+    "postal_code": "V8B 0A1"
+  },
+  {
+    "city": "St. Albert",
+    "province": "AB",
+    "postal_code": "T8N 0A1"
+  },
+  {
+    "city": "St. Catharines",
+    "province": "ON",
+    "postal_code": "L2M 0A1"
+  },
+  {
+    "city": "St. John's",
+    "province": "NL",
+    "postal_code": "A0A 1J0"
+  },
+  {
+    "city": "Steinbach",
+    "province": "MB",
+    "postal_code": "R5G 0A1"
+  },
+  {
+    "city": "Sudbury",
+    "province": "ON",
+    "postal_code": "P3A 0A1"
+  },
+  {
+    "city": "Summerside",
+    "province": "PE",
+    "postal_code": "C1N 0A1"
+  },
+  {
+    "city": "Surrey",
+    "province": "BC",
+    "postal_code": "V3R 0A1"
+  },
+  {
+    "city": "Swift Current",
+    "province": "SK",
+    "postal_code": "S9H 0A1"
+  },
+  {
+    "city": "Sydney",
+    "province": "NS",
+    "postal_code": "B1L 0B5"
+  },
+  {
+    "city": "Terrebonne",
+    "province": "QC",
+    "postal_code": "J0N 1H0"
+  },
+  {
+    "city": "Thompson",
+    "province": "MB",
+    "postal_code": "R8N 0A1"
+  },
+  {
+    "city": "Thunder Bay",
+    "province": "ON",
+    "postal_code": "P7A 0A2"
+  },
+  {
+    "city": "Timmins",
+    "province": "ON",
+    "postal_code": "P4N 0A2"
+  },
+  {
+    "city": "Toronto",
+    "province": "ON",
+    "postal_code": "M3C 0C1"
+  },
+  {
+    "city": "Trois-Rivieres",
+    "province": "QC",
+    "postal_code": "G8T 0A1"
+  },
+  {
+    "city": "Truro",
+    "province": "NS",
+    "postal_code": "B2N 0A2"
+  },
+  {
+    "city": "Vancouver",
+    "province": "BC",
+    "postal_code": "V5K 0A1"
+  },
+  {
+    "city": "Vaughan",
+    "province": "ON",
+    "postal_code": "L6A 0K9"
+  },
+  {
+    "city": "Vernon",
+    "province": "BC",
+    "postal_code": "V1B 0A2"
+  },
+  {
+    "city": "Victoria",
+    "province": "BC",
+    "postal_code": "V8N 0A1"
+  },
+  {
+    "city": "Waterloo",
+    "province": "ON",
+    "postal_code": "N2J 0A1"
+  },
+  {
+    "city": "Whistler",
+    "province": "BC",
+    "postal_code": "V0N 0A0"
+  },
+  {
+    "city": "Whitby",
+    "province": "ON",
+    "postal_code": "L1M 0A1"
+  },
+  {
+    "city": "Whitehorse",
+    "province": "YT",
+    "postal_code": "Y1A 0A1"
+  },
+  {
+    "city": "Windsor",
+    "province": "ON",
+    "postal_code": "N8N 0A1"
+  },
+  {
+    "city": "Winnipeg",
+    "province": "MB",
+    "postal_code": "R2C 0A1"
+  },
+  {
+    "city": "Yellowknife",
+    "province": "NT",
+    "postal_code": "X1A 0A1"
+  },
+  {
+    "city": "Yorkton",
+    "province": "SK",
+    "postal_code": "S3N 0A1"
+  }
+]
