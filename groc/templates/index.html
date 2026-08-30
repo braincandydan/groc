@@ -103,6 +103,11 @@
     height: 36px; padding: 0 10px; background: var(--marigold); border: none; color: var(--pine);
     font-size: 11.5px; font-weight: 800; letter-spacing: .06em;
   }
+  /* .text-link-btn defaults to pine-on-cream, which is invisible against
+     this header's pine background -- confirmed via a real headless-browser
+     check (present in the DOM, display:block, but literally the same color
+     as its background). */
+  #postal-edit-city-picker-btn { color: var(--marigold); align-self: flex-start; }
   #tab-switcher {
     display: flex; border: 1px solid var(--on-pine-border);
   }
