@@ -109,6 +109,7 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
 
         conn = _connect()
         postal_code_scraped = False
+        ingest_token = None
         if postal_code:
             # Lets the scheduled scraper (groc scrape-tracked) pick up a
             # postal code the next time it runs, even if it has zero data
@@ -120,6 +121,12 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
             # apart from "checked, genuinely nothing here" (don't retry).
             db.track_postal_code(conn, postal_code)
             postal_code_scraped = db.get_postal_code_scraped_at(conn, postal_code) is not None
+            if not postal_code_scraped:
+                # Only issued when a client-side scrape is actually the next
+                # step -- required by /api/ingest-scrape so a submission must
+                # be preceded by a real search for this exact postal code,
+                # not fabricated out of nowhere by an unrelated caller.
+                ingest_token = db.issue_ingest_token(conn, postal_code)
         rows = search_items(conn, query, postal_code=postal_code, limit=limit, offset=offset)
         # Whether the client might need another page -- best_per_merchant
         # collapses rows *after* this check, since it answers "was this page
@@ -131,6 +138,7 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
             "results": [_row_to_dict(r) for r in rows],
             "has_more": has_more,
             "postal_code_scraped": postal_code_scraped,
+            "ingest_token": ingest_token,
         })
 
     @app.post("/api/ingest-scrape")
@@ -145,6 +153,12 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         arbitrary browser-submitted prices/merchants with no real
         verification against Flipp's actual data.
 
+        Requires a token from a prior /api/search response for this exact
+        postal code (see db.issue_ingest_token/redeem_ingest_token) --
+        without this, shape validation alone would still let any caller
+        submit fabricated flyer data for any postal code with no connection
+        to an actual scrape /api/search ever kicked off.
+
         Every input is untrusted: shape/size is validated defensively so a
         malformed or oversized payload gets a clean 400, never a 500 (a
         single bad flyer/item within an otherwise-valid payload is skipped,
@@ -157,6 +171,14 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         postal_code = _normalize_postal_code(payload.get("postal_code"))
         if not postal_code or not _POSTAL_CODE_RE.match(postal_code):
             return jsonify({"error": "invalid or missing 'postal_code'"}), 400
+
+        token = payload.get("token")
+        if not isinstance(token, str) or not token:
+            return jsonify({"error": "missing required field 'token'"}), 401
+
+        conn = _connect()
+        if not db.redeem_ingest_token(conn, token, postal_code):
+            return jsonify({"error": "invalid, expired, or already-used token"}), 401
 
         flyers_payload = payload.get("flyers")
         if not isinstance(flyers_payload, list):
@@ -172,7 +194,6 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
             if not isinstance(entry.get("items"), list):
                 return jsonify({"error": "each entry needs an 'items' list"}), 400
 
-        conn = _connect()
         total_stored = 0
         for entry in flyers_payload:
             # Truncate rather than reject the whole request over one large

@@ -204,6 +204,14 @@ to a genuinely data-less area. The daily scheduled workflow above still
 re-scrapes everything server-side for freshness; this just removes the wait
 for brand-new areas.
 
+Shape validation alone isn't enough to trust a public write endpoint —
+nothing stopped an unrelated caller from POSTing fabricated merchant/price
+data for any postal code. `/api/search` only issues a short-lived (10 min),
+single-use `ingest_token` when it reports a postal code as not-yet-scraped;
+`/api/ingest-scrape` requires that exact token, bound to that exact postal
+code, and rejects a missing/wrong/expired/reused one with a 401. A
+submission has to be preceded by a real search for that postal code.
+
 An earlier version of this instead asked the GitHub Actions workflow to run
 immediately (`groc/github_trigger.py`) — removed because it re-ran the same
 "scrape everything tracked" job rather than just the new postal code, so its

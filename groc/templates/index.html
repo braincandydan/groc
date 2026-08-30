@@ -711,8 +711,12 @@
   // caller decides how to surface that). Never marks the postal code as
   // scraped on failure, so a transient error (network blip, Flipp timeout)
   // can naturally retry on the next visit instead of being mistaken for "we
-  // checked, and there's genuinely nothing here."
-  async function runClientSideScrapeAndSave(code) {
+  // checked, and there's genuinely nothing here." `token` comes from the
+  // /api/search response that determined this postal code needed scraping --
+  // required by the server so a submission can't be fabricated out of
+  // nowhere by something other than this exact flow.
+  async function runClientSideScrapeAndSave(code, token) {
+    if (!token) return false;
     let bundles;
     try {
       bundles = await clientSideScrapeFlipp(code, (done, total) => {
@@ -728,7 +732,7 @@
       const res = await fetch('/api/ingest-scrape', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ postal_code: code, flyers: bundles }),
+        body: JSON.stringify({ postal_code: code, token: token, flyers: bundles }),
       });
       return res.ok;
     } catch (err) {
@@ -1546,6 +1550,7 @@
   });
 
   let postalCodeScraped = false;
+  let pendingIngestToken = null;
 
   async function startLoadingFor(code) {
     postalCode = code;
@@ -1578,6 +1583,7 @@
         }
         allResults = allResults.concat(data.results || []);
         postalCodeScraped = !!data.postal_code_scraped;
+        pendingIngestToken = data.ingest_token || null;
         if (!data.has_more) break;
         offset += PAGE_SIZE;
       }
@@ -1594,7 +1600,7 @@
     // data-less area: once /api/ingest-scrape marks it scraped, the
     // re-fetch below will see postalCodeScraped=true even if still empty.
     if (allResults.length === 0 && !postalCodeScraped) {
-      const saved = await runClientSideScrapeAndSave(code);
+      const saved = await runClientSideScrapeAndSave(code, pendingIngestToken);
       document.getElementById('loading-bar').classList.remove('open');
       if (!saved) {
         // postalCodeScraped is still false here, so renderDeals()'s

@@ -20,9 +20,10 @@ Postgres's `%s`/`%(name)s` at the boundary.
 from __future__ import annotations
 
 import re
+import secrets
 import sqlite3
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Union
 
@@ -55,6 +56,13 @@ CREATE TABLE IF NOT EXISTS tracked_postal_codes (
     postal_code TEXT PRIMARY KEY,
     first_requested_at TEXT NOT NULL,
     last_scraped_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ingest_tokens (
+    token TEXT PRIMARY KEY,
+    postal_code TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT
 );
 """
 
@@ -90,6 +98,13 @@ CREATE TABLE IF NOT EXISTS tracked_postal_codes (
     postal_code TEXT PRIMARY KEY,
     first_requested_at TEXT NOT NULL,
     last_scraped_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS ingest_tokens (
+    token TEXT PRIMARY KEY,
+    postal_code TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT
 );
 """
 
@@ -295,6 +310,51 @@ def mark_postal_code_scraped(conn, postal_code: str, scraped_at: str) -> None:
         (scraped_at, postal_code),
     )
     conn.commit()
+
+
+_INGEST_TOKEN_TTL_SECONDS = 600  # generous: even a dense-city scrape measured ~40s end-to-end
+
+
+def issue_ingest_token(conn, postal_code: str) -> str:
+    """Issue a short-lived, single-use token authorizing one /api/ingest-scrape
+    submission for this exact postal code.
+
+    Without this, /api/ingest-scrape would accept a shape-valid submission
+    from *any* caller for *any* postal code -- there was nothing tying a
+    submission back to an actual client-side scrape that /api/search itself
+    kicked off. A token is only ever issued when a search reports a postal
+    code as not-yet-scraped, is bound to that one postal code, expires
+    quickly, and is consumed on first successful redemption.
+    """
+    # Opportunistic cleanup -- keeps the table bounded without a separate
+    # cron job; cheap since it only touches already-expired rows.
+    conn.execute("DELETE FROM ingest_tokens WHERE expires_at < ?", (utcnow_iso(),))
+    token = secrets.token_urlsafe(32)
+    expires_at = (datetime.now(timezone.utc) + timedelta(seconds=_INGEST_TOKEN_TTL_SECONDS)).isoformat()
+    conn.execute(
+        "INSERT INTO ingest_tokens (token, postal_code, expires_at, used_at) VALUES (?, ?, ?, NULL)",
+        (token, postal_code, expires_at),
+    )
+    conn.commit()
+    return token
+
+
+def redeem_ingest_token(conn, token: str, postal_code: str) -> bool:
+    """Consumes a token, returning True only if it's valid: exists, matches
+    this postal code, isn't expired, and hasn't already been used. Single-use
+    -- a second redemption attempt with the same token always fails, so a
+    captured/replayed token can't be used to submit twice.
+    """
+    row = conn.execute(
+        "SELECT postal_code, expires_at, used_at FROM ingest_tokens WHERE token = ?", (token,)
+    ).fetchone()
+    if row is None or row["used_at"] is not None or row["postal_code"] != postal_code:
+        return False
+    if row["expires_at"] < utcnow_iso():
+        return False
+    conn.execute("UPDATE ingest_tokens SET used_at = ? WHERE token = ?", (utcnow_iso(), token))
+    conn.commit()
+    return True
 
 
 def utcnow_iso() -> str:

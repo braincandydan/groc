@@ -62,6 +62,7 @@ def pg_conn():
     db.init_db(conn)
     conn.execute("DELETE FROM flyer_items")
     conn.execute("DELETE FROM tracked_postal_codes")
+    conn.execute("DELETE FROM ingest_tokens")
     conn.commit()
     yield conn
     conn.close()
@@ -202,3 +203,14 @@ def test_get_postal_code_scraped_at_against_postgres(pg_conn):
 
     db.mark_postal_code_scraped(pg_conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
     assert db.get_postal_code_scraped_at(pg_conn, "M5V2H1") == "2026-08-30T06:00:00+00:00"
+
+
+def test_ingest_token_issue_and_redeem_against_postgres(pg_conn):
+    # Single-use + postal-code-bound behavior confirmed identical on
+    # Postgres, not just assumed to work because the SQL string parses --
+    # this session's established pattern given real SQLite/Postgres
+    # divergence bugs found before (e.g. LIKE case-sensitivity).
+    token = db.issue_ingest_token(pg_conn, "M5V2H1")
+    assert db.redeem_ingest_token(pg_conn, token, "V1Y7M4") is False  # wrong postal code
+    assert db.redeem_ingest_token(pg_conn, token, "M5V2H1") is True
+    assert db.redeem_ingest_token(pg_conn, token, "M5V2H1") is False  # already used

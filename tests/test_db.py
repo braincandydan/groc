@@ -184,3 +184,59 @@ def test_get_postal_code_scraped_at_returns_timestamp_after_marking_scraped():
     db.mark_postal_code_scraped(conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
 
     assert db.get_postal_code_scraped_at(conn, "M5V2H1") == "2026-08-30T06:00:00+00:00"
+
+
+def test_issue_ingest_token_returns_a_real_looking_random_token():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    token = db.issue_ingest_token(conn, "M5V2H1")
+
+    assert isinstance(token, str) and len(token) >= 32
+    assert db.issue_ingest_token(conn, "M5V2H1") != token  # never reused
+
+
+def test_redeem_ingest_token_succeeds_for_a_valid_token():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    token = db.issue_ingest_token(conn, "M5V2H1")
+
+    assert db.redeem_ingest_token(conn, token, "M5V2H1") is True
+
+
+def test_redeem_ingest_token_is_single_use():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    token = db.issue_ingest_token(conn, "M5V2H1")
+
+    assert db.redeem_ingest_token(conn, token, "M5V2H1") is True
+    assert db.redeem_ingest_token(conn, token, "M5V2H1") is False  # already used
+
+
+def test_redeem_ingest_token_rejects_a_token_for_a_different_postal_code():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    token = db.issue_ingest_token(conn, "M5V2H1")
+
+    assert db.redeem_ingest_token(conn, token, "V1Y7M4") is False
+
+
+def test_redeem_ingest_token_rejects_an_unknown_token():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    assert db.redeem_ingest_token(conn, "not-a-real-token", "M5V2H1") is False
+
+
+def test_redeem_ingest_token_rejects_an_expired_token():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    token = db.issue_ingest_token(conn, "M5V2H1")
+    # Force it into the past rather than waiting out the real TTL.
+    conn.execute(
+        "UPDATE ingest_tokens SET expires_at = ? WHERE token = ?",
+        ("2000-01-01T00:00:00+00:00", token),
+    )
+    conn.commit()
+
+    assert db.redeem_ingest_token(conn, token, "M5V2H1") is False

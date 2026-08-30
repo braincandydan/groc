@@ -88,7 +88,9 @@ def test_api_search_works_against_a_completely_fresh_unmigrated_database():
     resp = app.test_client().get("/api/search?postal_code=M5V2H1")
 
     assert resp.status_code == 200
-    assert resp.get_json() == {"results": [], "has_more": False, "postal_code_scraped": False}
+    data = resp.get_json()
+    assert data["results"] == [] and data["has_more"] is False and data["postal_code_scraped"] is False
+    assert data["ingest_token"]  # a fresh, unscraped postal code should get one
 
 
 def test_api_search_returns_matches(app_and_db):
@@ -187,8 +189,10 @@ def test_api_search_reports_postal_code_not_yet_scraped(app_and_db):
     # for it yet.
     client = app_and_db.test_client()
     resp = client.get("/api/search?postal_code=X1Y2Z3")
+    data = resp.get_json()
 
-    assert resp.get_json()["postal_code_scraped"] is False
+    assert data["postal_code_scraped"] is False
+    assert data["ingest_token"]  # only issued when a client-side scrape is actually the next step
 
 
 def test_api_search_reports_postal_code_already_scraped(app_and_db):
@@ -201,15 +205,19 @@ def test_api_search_reports_postal_code_already_scraped(app_and_db):
 
     client = app_and_db.test_client()
     resp = client.get("/api/search?postal_code=X1Y2Z3")
+    data = resp.get_json()
 
-    assert resp.get_json()["postal_code_scraped"] is True
+    assert data["postal_code_scraped"] is True
+    assert data["ingest_token"] is None  # no scrape needed, so nothing to authorize
 
 
 def test_api_search_omits_postal_code_scraped_semantics_without_a_postal_code(app_and_db):
     client = app_and_db.test_client()
     resp = client.get("/api/search?q=chicken")
+    data = resp.get_json()
 
-    assert resp.get_json()["postal_code_scraped"] is False
+    assert data["postal_code_scraped"] is False
+    assert data["ingest_token"] is None
 
 
 def test_api_ask_returns_answer_and_sources(app_and_db):
@@ -296,11 +304,22 @@ def test_api_places_entries_look_like_real_postal_codes(app_and_db):
 # must not sink an otherwise-valid batch.
 # ---------------------------------------------------------------------------
 
-def _ingest_payload(postal_code="N9Z9Z9", flyers=None):
+def _get_ingest_token(client, postal_code):
+    # /api/ingest-scrape requires a token minted by a prior /api/search call
+    # for this exact postal code -- see db.issue_ingest_token. Only issued
+    # when that postal code hasn't been marked scraped yet.
+    resp = client.get(f"/api/search?postal_code={postal_code}")
+    token = resp.get_json()["ingest_token"]
+    assert token, f"expected an ingest_token for postal_code={postal_code}"
+    return token
+
+
+def _ingest_payload(postal_code="N9Z9Z9", flyers=None, token=None):
     # A postal code distinct from the app_and_db fixture's seeded row
     # (M5V2H1) so assertions here can't collide with pre-existing fixture data.
     return {
         "postal_code": postal_code,
+        "token": token,
         "flyers": flyers if flyers is not None else [
             {
                 "flyer": {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]},
@@ -315,9 +334,41 @@ def _ingest_payload(postal_code="N9Z9Z9", flyers=None):
     }
 
 
+def test_api_ingest_scrape_rejects_a_submission_with_no_prior_search(app_and_db):
+    # The core of the fix: a caller that never went through /api/search (so
+    # never got a token) must not be able to store fabricated flyer data for
+    # an arbitrary postal code.
+    client = app_and_db.test_client()
+    resp = client.post("/api/ingest-scrape", json=_ingest_payload(token=None))
+    assert resp.status_code == 401
+
+    resp = client.post("/api/ingest-scrape", json=_ingest_payload(token="totally-made-up-token"))
+    assert resp.status_code == 401
+
+    conn = db.connect(app_and_db.config["DB_PATH"])
+    assert conn.execute("SELECT COUNT(*) FROM flyer_items WHERE postal_code = 'N9Z9Z9'").fetchone()[0] == 0
+
+
+def test_api_ingest_scrape_rejects_a_token_issued_for_a_different_postal_code(app_and_db):
+    client = app_and_db.test_client()
+    token = _get_ingest_token(client, "N9Z9Z9")
+    resp = client.post("/api/ingest-scrape", json=_ingest_payload(postal_code="X1Y2Z3", token=token))
+    assert resp.status_code == 401
+
+
+def test_api_ingest_scrape_rejects_a_reused_token(app_and_db):
+    client = app_and_db.test_client()
+    token = _get_ingest_token(client, "N9Z9Z9")
+    first = client.post("/api/ingest-scrape", json=_ingest_payload(token=token))
+    assert first.status_code == 200
+    second = client.post("/api/ingest-scrape", json=_ingest_payload(token=token))
+    assert second.status_code == 401
+
+
 def test_api_ingest_scrape_stores_valid_payload(app_and_db):
     client = app_and_db.test_client()
-    resp = client.post("/api/ingest-scrape", json=_ingest_payload())
+    token = _get_ingest_token(client, "N9Z9Z9")
+    resp = client.post("/api/ingest-scrape", json=_ingest_payload(token=token))
 
     assert resp.status_code == 200
     assert resp.get_json() == {"stored": 1}
@@ -330,7 +381,8 @@ def test_api_ingest_scrape_stores_valid_payload(app_and_db):
 
 def test_api_ingest_scrape_marks_the_postal_code_as_scraped(app_and_db):
     client = app_and_db.test_client()
-    client.post("/api/ingest-scrape", json=_ingest_payload(postal_code="X1Y2Z3", flyers=[]))
+    token = _get_ingest_token(client, "X1Y2Z3")
+    client.post("/api/ingest-scrape", json=_ingest_payload(postal_code="X1Y2Z3", flyers=[], token=token))
 
     conn = db.connect(app_and_db.config["DB_PATH"])
     assert db.get_postal_code_scraped_at(conn, "X1Y2Z3") is not None
@@ -341,7 +393,8 @@ def test_api_ingest_scrape_filters_non_grocery_flyers(app_and_db):
     # get it stored -- the server re-applies the category filter itself,
     # never trusting what the client claims should be included.
     client = app_and_db.test_client()
-    payload = _ingest_payload(flyers=[
+    token = _get_ingest_token(client, "N9Z9Z9")
+    payload = _ingest_payload(token=token, flyers=[
         {"flyer": {"id": 1, "merchant": "Best Buy", "categories": ["Electronics"]}, "items": [{"name": "TV", "price": "$399.99"}]},
     ])
     resp = client.post("/api/ingest-scrape", json=payload)
@@ -353,9 +406,15 @@ def test_api_ingest_scrape_filters_non_grocery_flyers(app_and_db):
 
 
 def test_api_ingest_scrape_is_idempotent(app_and_db):
+    # Two distinct tokens for the same not-yet-scraped postal code (both
+    # fetched before either ingest call, since the first ingest marks it
+    # scraped) -- submitting the same payload via each must still only store
+    # one row, per upsert_items' existing dedup key.
     client = app_and_db.test_client()
-    client.post("/api/ingest-scrape", json=_ingest_payload())
-    client.post("/api/ingest-scrape", json=_ingest_payload())
+    token1 = _get_ingest_token(client, "N9Z9Z9")
+    token2 = _get_ingest_token(client, "N9Z9Z9")
+    client.post("/api/ingest-scrape", json=_ingest_payload(token=token1))
+    client.post("/api/ingest-scrape", json=_ingest_payload(token=token2))
 
     conn = db.connect(app_and_db.config["DB_PATH"])
     assert conn.execute("SELECT COUNT(*) FROM flyer_items WHERE postal_code = 'N9Z9Z9'").fetchone()[0] == 1
@@ -363,7 +422,8 @@ def test_api_ingest_scrape_is_idempotent(app_and_db):
 
 def test_api_ingest_scrape_skips_malformed_individual_items(app_and_db):
     client = app_and_db.test_client()
-    payload = _ingest_payload(flyers=[
+    token = _get_ingest_token(client, "N9Z9Z9")
+    payload = _ingest_payload(token=token, flyers=[
         {
             "flyer": {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]},
             "items": [{"name": "Milk 2L", "price": "$3.99"}, "not a dict", None, 42],
@@ -389,7 +449,8 @@ def test_api_ingest_scrape_rejects_invalid_postal_code_format(app_and_db):
 
 def test_api_ingest_scrape_rejects_non_list_flyers(app_and_db):
     client = app_and_db.test_client()
-    payload = {"postal_code": "M5V2H1", "flyers": "not a list"}
+    token = _get_ingest_token(client, "M5V2H1")
+    payload = {"postal_code": "M5V2H1", "token": token, "flyers": "not a list"}
     resp = client.post("/api/ingest-scrape", json=payload)
     assert resp.status_code == 400
 
@@ -397,12 +458,13 @@ def test_api_ingest_scrape_rejects_non_list_flyers(app_and_db):
 def test_api_ingest_scrape_rejects_too_many_flyers(app_and_db):
     from groc.webapp import MAX_INGEST_FLYERS
 
+    client = app_and_db.test_client()
+    token = _get_ingest_token(client, "N9Z9Z9")
     flyers = [
         {"flyer": {"id": i, "merchant": "No Frills", "categories": ["Groceries"]}, "items": []}
         for i in range(MAX_INGEST_FLYERS + 1)
     ]
-    client = app_and_db.test_client()
-    resp = client.post("/api/ingest-scrape", json=_ingest_payload(flyers=flyers))
+    resp = client.post("/api/ingest-scrape", json=_ingest_payload(token=token, flyers=flyers))
     assert resp.status_code == 400
 
 
@@ -413,7 +475,9 @@ def test_api_ingest_scrape_truncates_rather_than_rejects_an_oversized_flyer(app_
     # over-cap flyer is truncated instead of failing the whole request.
     from groc.webapp import MAX_INGEST_ITEMS_PER_FLYER
 
-    payload = _ingest_payload(flyers=[
+    client = app_and_db.test_client()
+    token = _get_ingest_token(client, "N9Z9Z9")
+    payload = _ingest_payload(token=token, flyers=[
         {
             "flyer": {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]},
             "items": [
@@ -422,7 +486,6 @@ def test_api_ingest_scrape_truncates_rather_than_rejects_an_oversized_flyer(app_
             ],
         },
     ])
-    client = app_and_db.test_client()
     resp = client.post("/api/ingest-scrape", json=payload)
 
     assert resp.status_code == 200
@@ -431,14 +494,16 @@ def test_api_ingest_scrape_truncates_rather_than_rejects_an_oversized_flyer(app_
 
 def test_api_ingest_scrape_rejects_entry_missing_flyer_object(app_and_db):
     client = app_and_db.test_client()
-    payload = _ingest_payload(flyers=[{"items": [{"name": "Milk", "price": "$3.99"}]}])
+    token = _get_ingest_token(client, "N9Z9Z9")
+    payload = _ingest_payload(token=token, flyers=[{"items": [{"name": "Milk", "price": "$3.99"}]}])
     resp = client.post("/api/ingest-scrape", json=payload)
     assert resp.status_code == 400
 
 
 def test_api_ingest_scrape_rejects_entry_missing_items_list(app_and_db):
     client = app_and_db.test_client()
-    payload = _ingest_payload(flyers=[{"flyer": {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]}}])
+    token = _get_ingest_token(client, "N9Z9Z9")
+    payload = _ingest_payload(token=token, flyers=[{"flyer": {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]}}])
     resp = client.post("/api/ingest-scrape", json=payload)
     assert resp.status_code == 400
 
@@ -467,8 +532,10 @@ def test_api_ingest_scrape_matches_what_server_side_scrape_would_produce(app_and
     server_row = dict(conn.execute("SELECT * FROM flyer_items WHERE postal_code = 'V1Y7M4'").fetchone())
 
     client = app_and_db.test_client()
+    token = _get_ingest_token(client, "N9Z9Z9")
     payload = {
         "postal_code": "N9Z9Z9",
+        "token": token,
         "flyers": [{
             "flyer": {"id": 99, "merchant": "Metro", "categories": ["Groceries"]},
             "items": [{"name": "Eggs Dozen", "price": "was $5.99 now $4.49"}],
