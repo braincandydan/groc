@@ -71,4 +71,16 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         result = chat_ask(conn, question, postal_code=postal_code, client=app.config["CHAT_CLIENT"])
         return jsonify({"answer": result.answer, "sources": result.sources})
 
+    @app.errorhandler(Exception)
+    def handle_error(e):
+        # Flask's default error page is HTML, which breaks the frontend's
+        # `.json()` parsing with a cryptic "Unexpected token '<'" instead of
+        # showing what actually went wrong. Log the real exception server-side
+        # (visible in Vercel's function logs) but never echo it to the client
+        # -- a DB connection failure's message can include the DSN/credentials.
+        app.logger.exception("unhandled error handling %s %s", request.method, request.path)
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "internal server error"}), 500
+        raise e
+
     return app

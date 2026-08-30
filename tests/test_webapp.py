@@ -139,3 +139,22 @@ def test_api_ask_requires_question_field(app_and_db):
     client = app_and_db.test_client()
     resp = client.post("/api/ask", json={})
     assert resp.status_code == 400
+
+
+def test_api_search_returns_json_error_on_unhandled_exception(app_and_db, monkeypatch):
+    # A crash (e.g. a bad DB connection string) should never surface Flask's
+    # default HTML error page to an API client -- that's what produced the
+    # "Unexpected token '<'" bug when this endpoint 500'd on a real deployment.
+    def _boom(*args, **kwargs):
+        raise RuntimeError("password authentication failed for user 'secret_should_not_leak'")
+
+    monkeypatch.setattr("groc.webapp.search_items", _boom)
+
+    client = app_and_db.test_client()
+    resp = client.get("/api/search?q=chicken")
+
+    assert resp.status_code == 500
+    assert resp.content_type == "application/json"
+    data = resp.get_json()
+    assert data == {"error": "internal server error"}
+    assert "secret_should_not_leak" not in resp.get_data(as_text=True)
