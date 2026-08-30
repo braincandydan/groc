@@ -129,7 +129,13 @@
     display: flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 700;
     letter-spacing: .06em; color: var(--on-pine-text); white-space: nowrap; user-select: none;
   }
+  /* Visually hidden but still in the accessibility tree and tab order --
+     unlike display:none, which removes an element from both entirely (the
+     CHEAPEST/STORE toggle was completely invisible to screen readers/keyboard
+     until this fix: 0 checkboxes were exposed anywhere on the page). */
+  .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
   .switch { width: 32px; height: 18px; border-radius: 9px; background: var(--on-pine-border); padding: 2px; display: flex; flex-shrink: 0; }
+  #best-per-merchant:focus-visible + .switch { outline: 2px solid var(--marigold); outline-offset: 2px; }
   .switch.on { background: var(--marigold); justify-content: flex-end; }
   .switch-thumb { width: 14px; height: 14px; border-radius: 7px; background: var(--on-pine-muted); }
   .switch.on .switch-thumb { background: var(--pine); }
@@ -342,8 +348,8 @@
       <div id="status-row">
         <div id="status-text"></div>
         <label id="best-toggle-label">CHEAPEST/STORE
-          <input type="checkbox" id="best-per-merchant" style="display: none">
-          <div class="switch" id="best-switch"><div class="switch-thumb"></div></div>
+          <input type="checkbox" id="best-per-merchant" class="visually-hidden">
+          <div class="switch" id="best-switch" aria-hidden="true"><div class="switch-thumb"></div></div>
         </label>
       </div>
     </header>
@@ -777,7 +783,7 @@
       const checked = !deselectedStores.has(s);
       return (
         '<div class="store-row">' +
-          '<button class="store-checkbox' + (checked ? ' checked' : '') + '" data-store="' + escapeHtml(s) + '" type="button">' + (checked ? '✓' : '') + '</button>' +
+          '<button class="store-checkbox' + (checked ? ' checked' : '') + '" data-store="' + escapeHtml(s) + '" type="button" role="checkbox" aria-checked="' + checked + '" aria-label="' + escapeHtml(s) + '">' + (checked ? '✓' : '') + '</button>' +
           '<div class="mono-badge">' + escapeHtml(storeInitials(s)) + '</div>' +
           '<div class="store-name">' + escapeHtml(s) + '</div>' +
           '<div class="store-count">' + counts[s] + '</div>' +
@@ -876,13 +882,14 @@
   });
 
   // ---------- Best-per-merchant toggle ----------
+  // Relies on native <label>+<input type=checkbox> behavior (click anywhere
+  // in the label, or Tab to the checkbox and press Space) rather than
+  // hijacking clicks -- that's what makes this keyboard/screen-reader
+  // accessible instead of only responding to a direct mouse/touch click.
   function updateBestSwitch() {
     document.getElementById('best-switch').classList.toggle('on', document.getElementById('best-per-merchant').checked);
   }
-  document.getElementById('best-toggle-label').addEventListener('click', (e) => {
-    e.preventDefault();
-    const cb = document.getElementById('best-per-merchant');
-    cb.checked = !cb.checked;
+  document.getElementById('best-per-merchant').addEventListener('change', () => {
     updateBestSwitch();
     renderDeals();
   });
