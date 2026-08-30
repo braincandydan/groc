@@ -204,7 +204,7 @@
      visual size/position in the row unchanged while growing the tappable area. */
   .list-btn { margin-top: 2px; min-height: 40px; padding: 0 10px; border: 1.5px solid var(--pine); background: none; font-size: 11px; font-weight: 800; letter-spacing: .06em; color: var(--pine); }
   .list-btn.listed { background: var(--marigold); }
-  .remove-btn { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); background: none; border: none; padding: 14px 8px; margin: -14px -8px; }
+  .remove-btn { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); background: none; border: none; padding: 14px 8px; margin: -14px -8px; transition: opacity .15s ease; }
 
   /* Check-off (mark picked up while shopping) -- min 40px tap target like
      .list-btn/.remove-btn above, via padding rather than resizing the
@@ -233,6 +233,13 @@
   .swipe-bg { position: absolute; top: 0; bottom: 0; right: 0; width: 84px; z-index: 0; background: var(--red); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
   .swipe-wrap .deal-row { position: relative; z-index: 1; transition: transform .2s ease; will-change: transform; }
   .swipe-wrap .deal-row.swiping { transition: none; }
+  /* Once fully revealed, the swipe backdrop's red REMOVE *is* the visible
+     affordance -- fade out the static REMOVE button so a swiped-open row
+     doesn't show two REMOVE labels side by side. It's a swipe/mouse-drag-
+     only state (dataset.revealed is never set by keyboard interaction), so
+     a keyboard/screen-reader user always reaches the always-present static
+     button unaffected by this. */
+  .swipe-wrap .deal-row[data-revealed="1"] .remove-btn { opacity: 0; pointer-events: none; }
 
   #mylist-archive-row { display: none; padding: 14px 16px; text-align: center; border-top: 1.5px solid var(--divider); }
   #mylist-archive-row.open { display: block; }
@@ -266,15 +273,30 @@
     font-size: 12px; font-weight: 800; letter-spacing: .06em;
   }
   .mylist-section-heading { padding: 10px 16px 4px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: var(--muted); background: var(--cream); }
+  /* A shopping-list item and its matched deals are one visual unit -- the
+     group owns the single row-boundary border so "eggs" and its match
+     underneath read as nested content, not two unrelated stacked rows. */
+  .shopping-item-group { border-bottom: 1.5px solid var(--pine); background: var(--cream); }
+  .shopping-item-group .swipe-wrap, .shopping-item-group .deal-row { border-bottom: none; }
+  /* Tinted + bold text distinguishes a typed want from a real deal row (no
+     image/merchant/price to fill the row, so it shouldn't read as a
+     stripped-down deal row -- it's a different kind of list entry). */
+  .shopping-row { background: var(--cream); }
+  .shopping-item-name { font-weight: 700; }
   /* Matched-deal sub-rows nest under a shopping-list item -- indented to
      roughly align under its text (past the 40px check-toggle + 12px gap),
      not swipeable/removable themselves since the underlying shopping-list
      item is what owns removal. */
-  .matched-deals { display: flex; flex-direction: column; padding: 0 16px 8px 56px; gap: 6px; background: #fff; border-bottom: 1.5px solid var(--pine); }
+  .matched-deals { display: flex; flex-direction: column; padding: 2px 16px 8px 56px; gap: 6px; background: var(--cream); }
   .matched-deal-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
   .matched-deal-name { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .matched-deal-price { flex: none; font-size: 13px; font-weight: 700; color: var(--pine); font-variant-numeric: tabular-nums; }
-  .no-match-text { padding: 0 16px 10px 56px; font-size: 12px; color: var(--muted); background: #fff; border-bottom: 1.5px solid var(--pine); }
+  /* Padding + negative margin grows the tap target to ~40px without
+     enlarging the glyph, same trick as .remove-btn/.list-btn above. */
+  .matched-deal-list-btn { flex: none; font-size: 12px; font-weight: 800; color: var(--pine); background: none; border: 1.5px solid var(--pine); padding: 10px 9px; margin: -10px -4px -10px 0; }
+  .matched-deal-list-btn.listed { background: var(--marigold); border-color: var(--marigold); }
+  .matched-deals-more { padding: 2px 0 0; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .no-match-text { padding: 2px 16px 10px 56px; font-size: 12px; color: var(--muted); background: var(--cream); }
   .on-list-badge { flex: none; padding: 1px 6px; background: var(--pine); font-size: 9.5px; font-weight: 800; letter-spacing: .05em; color: var(--marigold); }
   #mylist-summary { padding: 12px 16px; background: var(--cream-deep); border-bottom: 1.5px solid var(--pine); display: flex; align-items: baseline; justify-content: space-between; }
   #mylist-count { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--pine); }
@@ -819,20 +841,24 @@
   // matches an existing not-done entry rather than erroring -- re-adding
   // "milk" after it's done is fine (checked off items keep their own row
   // until archived), duplicating an active one isn't useful.
+  // Returns the texts actually added (empty array if none) rather than a
+  // plain boolean, so the caller can toast "Added milk." vs "Added 3 items
+  // to your list." -- this app confirms every other list mutation
+  // (remove/archive) with a toast, so a silent add was the odd one out.
   function addShoppingListItems(rawText) {
     const parts = rawText.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
-    if (!parts.length) return false;
+    if (!parts.length) return [];
     const activeLower = new Set(shoppingList.filter(i => !i.done).map(i => i.text.toLowerCase()));
-    let added = false;
+    const addedTexts = [];
     for (const text of parts) {
       const lower = text.toLowerCase();
       if (activeLower.has(lower)) continue;
       shoppingList.push({ id: makeShoppingListId(), text: text, done: false, addedAt: new Date().toISOString() });
       activeLower.add(lower);
-      added = true;
+      addedTexts.push(text);
     }
-    if (added) saveShoppingList();
-    return added;
+    if (addedTexts.length) saveShoppingList();
+    return addedTexts;
   }
   function removeShoppingListItem(id) {
     const idx = shoppingList.findIndex(i => String(i.id) === String(id));
@@ -856,15 +882,18 @@
   // Case-insensitive substring match against whatever's currently loaded for
   // this postal code -- simple on purpose (no fuzzy matching library): a
   // flyer's item_name is usually verbose ("Beatrice 2% Milk 4L"), so a plain
-  // "milk" reliably matches it, cheapest-first, capped at 3 so one broad
-  // term doesn't flood the list.
-  function matchingDealsForText(text) {
+  // "milk" reliably matches it, cheapest-first. Unsliced so callers can show
+  // a "+N more" count instead of silently truncating.
+  function allMatchesForText(text) {
     const q = text.trim().toLowerCase();
     if (!q) return [];
     return allResults
       .filter(row => row.item_name.toLowerCase().includes(q))
-      .sort((a, b) => priceOrInfinity(a) - priceOrInfinity(b))
-      .slice(0, 3);
+      .sort((a, b) => priceOrInfinity(a) - priceOrInfinity(b));
+  }
+  const MATCHED_DEALS_CAP = 3;
+  function matchingDealsForText(text) {
+    return allMatchesForText(text).slice(0, MATCHED_DEALS_CAP);
   }
   function matchesAnyShoppingListItem(row) {
     const name = row.item_name.toLowerCase();
@@ -1036,13 +1065,13 @@
   // enough shape with a deal row to make a shared template clearer.
   function shoppingItemRowHtml(item) {
     const inner = (
-      '<div class="deal-row' + (item.done ? ' row-done' : '') + '" data-id="' + item.id + '">' +
+      '<div class="deal-row shopping-row' + (item.done ? ' row-done' : '') + '" data-id="' + item.id + '">' +
         '<label class="check-toggle">' +
           '<input type="checkbox" class="visually-hidden" data-action="shopping-check" data-id="' + item.id + '"' + (item.done ? ' checked' : '') + '>' +
           '<span class="check-box" aria-hidden="true"></span>' +
           '<span class="visually-hidden">Mark ' + escapeHtml(item.text) + ' as picked up</span>' +
         '</label>' +
-        '<div class="deal-mid"><div class="item-name">' + escapeHtml(item.text) + '</div></div>' +
+        '<div class="deal-mid"><div class="item-name shopping-item-name">' + escapeHtml(item.text) + '</div></div>' +
         '<button class="remove-btn" data-action="shopping-remove" data-id="' + item.id + '">REMOVE</button>' +
       '</div>'
     );
@@ -1054,12 +1083,22 @@
     );
   }
 
+  // The pin/unpin control reuses toggleListed/isListed against the real
+  // deal row -- pinning a match here is the exact same action as tapping
+  // + LIST on the Deals tab, not a second parallel mechanism. Its click
+  // handler (attachRowHandlers) stops propagation so it doesn't also open
+  // the row's detail sheet.
   function matchedDealRowHtml(row) {
+    const listed = isListed(row);
     return (
       '<div class="matched-deal-row" data-id="' + row.id + '">' +
         '<div class="mono-badge">' + escapeHtml(storeInitials(row.merchant)) + '</div>' +
         '<div class="matched-deal-name">' + escapeHtml(row.item_name) + '</div>' +
         '<div class="matched-deal-price">' + priceText(row) + '</div>' +
+        '<button class="matched-deal-list-btn' + (listed ? ' listed' : '') + '" data-action="matched-list" data-id="' + row.id + '" aria-label="' +
+          (listed ? 'Remove ' : 'Add ') + escapeHtml(row.item_name) + (listed ? ' from' : ' to') + ' My List">' +
+          (listed ? '✓' : '+') +
+        '</button>' +
       '</div>'
     );
   }
@@ -1069,13 +1108,19 @@
       let matchesHtml = '';
       if (!item.done) {
         if (allResults.length > 0) {
-          const matches = matchingDealsForText(item.text);
-          matchesHtml = matches.length
-            ? '<div class="matched-deals">' + matches.map(matchedDealRowHtml).join('') + '</div>'
-            : '<div class="no-match-text">No matching deals yet for "' + escapeHtml(item.text) + '".</div>';
+          const all = allMatchesForText(item.text);
+          const shown = all.slice(0, MATCHED_DEALS_CAP);
+          if (shown.length) {
+            const moreCount = all.length - shown.length;
+            matchesHtml = '<div class="matched-deals">' + shown.map(matchedDealRowHtml).join('') +
+              (moreCount > 0 ? '<div class="matched-deals-more">+' + moreCount + ' more match' + (moreCount === 1 ? '' : 'es') + '</div>' : '') +
+              '</div>';
+          } else {
+            matchesHtml = '<div class="no-match-text">No matching deals yet for "' + escapeHtml(item.text) + '".</div>';
+          }
         }
       }
-      return shoppingItemRowHtml(item) + matchesHtml;
+      return '<div class="shopping-item-group">' + shoppingItemRowHtml(item) + matchesHtml + '</div>';
     }).join('');
   }
 
@@ -1202,6 +1247,13 @@
         e.stopPropagation();
         openSwipeRowEl = null;
         removeShoppingListItem(btn.dataset.id);
+      });
+    });
+    container.querySelectorAll('[data-action="matched-list"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation(); // don't also trigger the matched-deal-row's open-detail click below
+        const row = findRowById(btn.dataset.id);
+        if (row) { toggleListed(row); renderDeals(); renderMyList(); }
       });
     });
     container.querySelectorAll('.matched-deal-row').forEach(el => {
@@ -1571,10 +1623,16 @@
   document.getElementById('mylist-add-row').addEventListener('submit', (e) => {
     e.preventDefault();
     const input = document.getElementById('mylist-add-input');
-    const added = addShoppingListItems(input.value);
+    const addedTexts = addShoppingListItems(input.value);
     input.value = '';
     input.focus(); // ready for the next item without re-clicking, like jotting a paper list
-    if (added) { renderMyList(); renderDeals(); } // new items can newly match rows already shown on the Deals tab
+    if (addedTexts.length) {
+      renderMyList();
+      renderDeals(); // new items can newly match rows already shown on the Deals tab
+      showToast(addedTexts.length === 1
+        ? 'Added ' + addedTexts[0] + '.'
+        : 'Added ' + addedTexts.length + ' items to your list.');
+    }
   });
 
   // ---------- Tabs ----------
