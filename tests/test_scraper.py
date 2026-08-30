@@ -1,7 +1,7 @@
 import tempfile
 
 from groc import db
-from groc.scraper import run_tracked, scrape_postal_code
+from groc.scraper import parse_and_store_flyer, run_tracked, scrape_postal_code
 
 
 class FakeFlippClient:
@@ -123,3 +123,109 @@ def test_run_tracked_with_no_tracked_postal_codes_does_nothing(monkeypatch):
     tmp.close()
 
     assert run_tracked(tmp.name) == {}
+
+
+# ---------------------------------------------------------------------------
+# parse_and_store_flyer -- the shared parse+store path used by both the
+# server-side scrape above and the client-side ingest endpoint (a browser
+# fetches raw Flipp JSON directly and POSTs it here to be parsed/stored, so
+# every input has to be treated as untrusted regardless of which path it
+# came from).
+# ---------------------------------------------------------------------------
+
+def test_parse_and_store_flyer_stores_items():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    flyer = {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]}
+    items = [{"name": "Milk 2L", "price": "$3.99"}]
+
+    stored = parse_and_store_flyer(conn, flyer, items, "M5V2H1")
+
+    assert stored == 1
+    row = conn.execute("SELECT * FROM flyer_items").fetchone()
+    assert row["merchant"] == "No Frills"
+    assert row["price"] == 3.99
+
+
+def test_parse_and_store_flyer_filters_by_category():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    flyer = {"id": 1, "merchant": "Best Buy", "categories": ["Electronics"]}
+    items = [{"name": "TV", "price": "$399.99"}]
+
+    stored = parse_and_store_flyer(conn, flyer, items, "M5V2H1")
+
+    assert stored == 0
+    assert conn.execute("SELECT COUNT(*) FROM flyer_items").fetchone()[0] == 0
+
+
+def test_parse_and_store_flyer_all_categories_bypasses_filter():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    flyer = {"id": 1, "merchant": "Best Buy", "categories": ["Electronics"]}
+    items = [{"name": "TV", "price": "$399.99"}]
+
+    stored = parse_and_store_flyer(conn, flyer, items, "M5V2H1", categories=None)
+
+    assert stored == 1
+
+
+def test_parse_and_store_flyer_returns_zero_for_missing_flyer_id():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    flyer = {"merchant": "No Frills", "categories": ["Groceries"]}
+    items = [{"name": "Milk 2L", "price": "$3.99"}]
+
+    assert parse_and_store_flyer(conn, flyer, items, "M5V2H1") == 0
+
+
+def test_parse_and_store_flyer_returns_zero_for_non_numeric_flyer_id():
+    # A malicious/malformed client-submitted flyer id -- must be rejected
+    # cleanly (skipped), never raise (that would surface as a 500 on the
+    # ingest endpoint instead of a clean 400/partial success).
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    flyer = {"id": "not-a-number", "merchant": "No Frills", "categories": ["Groceries"]}
+    items = [{"name": "Milk 2L", "price": "$3.99"}]
+
+    assert parse_and_store_flyer(conn, flyer, items, "M5V2H1") == 0
+
+
+def test_parse_and_store_flyer_handles_garbage_categories_without_crashing():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    for bad_categories in (5, None, {"not": "a list"}, ["Groceries", 123, None]):
+        flyer = {"id": 1, "merchant": "No Frills", "categories": bad_categories}
+        # Should not raise. "Groceries" present in the last case still passes the filter.
+        parse_and_store_flyer(conn, flyer, [{"name": "Milk", "price": "$3.99"}], "M5V2H1")
+
+
+def test_parse_and_store_flyer_skips_malformed_items_without_crashing():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    flyer = {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]}
+    items = [
+        {"name": "Milk 2L", "price": "$3.99"},
+        "just a string, not a dict",
+        None,
+        42,
+        {"name": "Eggs", "price": "$4.49"},
+    ]
+
+    stored = parse_and_store_flyer(conn, flyer, items, "M5V2H1")
+
+    assert stored == 2
+    names = {row["item_name"] for row in conn.execute("SELECT * FROM flyer_items").fetchall()}
+    assert names == {"Milk 2L", "Eggs"}
+
+
+def test_parse_and_store_flyer_coerces_non_string_cutout_image_url_to_null():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    flyer = {"id": 1, "merchant": "No Frills", "categories": ["Groceries"]}
+    items = [{"name": "Milk 2L", "price": "$3.99", "cutout_image_url": {"unexpected": "shape"}}]
+
+    parse_and_store_flyer(conn, flyer, items, "M5V2H1")
+
+    row = conn.execute("SELECT * FROM flyer_items").fetchone()
+    assert row["cutout_image_url"] is None

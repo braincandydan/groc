@@ -455,8 +455,8 @@
       <div id="results-list"></div>
       <div id="no-postal-data">
         <div class="field-group" style="gap: 8px">
-          <div class="no-results-heading">No deals for this postal code yet.</div>
-          <div class="no-results-body">We don't have flyer data here yet — this postal code has been noted, and we scrape new areas on a daily schedule. Check back later, or try a postal code you know has data (e.g. <strong>M5V 2H1</strong> or <strong>V1Y 7M4</strong>).</div>
+          <div class="no-results-heading" id="no-postal-data-heading"></div>
+          <div class="no-results-body" id="no-postal-data-body"></div>
         </div>
       </div>
       <div id="no-results">
@@ -630,6 +630,111 @@
 (function () {
   const PAGE_SIZE = 500;
   const MAX_PAGES = 50; // safety cap: 25,000 rows, well beyond any real postal code
+
+  // ---------- Client-side Flipp scrape ----------
+  // A brand-new postal code with zero results is scraped by the browser
+  // itself rather than waiting on a server-side job: Flipp's API sets
+  // Access-Control-Allow-Origin: *, confirmed live, so these are the same
+  // endpoints/params groc/flipp_client.py uses server-side, just called
+  // from here instead. This ONLY fetches Flipp's raw JSON -- it deliberately
+  // does not parse prices/names itself. That parsing happens exactly once,
+  // server-side in groc/scraper.py's parse_and_store_flyer, via the POST
+  // below -- a client that pre-parsed its own rows could fabricate arbitrary
+  // prices/merchants with nothing to check them against.
+  const FLIPP_FLYERS_URL = 'https://flyers-ng.flippback.com/api/flipp/data';
+  const FLIPP_FLYER_ITEMS_URL_TMPL = 'https://flyers-ng.flippback.com/api/flipp/flyers/{flyer_id}/flyer_items';
+  const FLIPP_REQUEST_DELAY_MS = 500; // matches FlippClient's server-side politeness delay
+  const FLIPP_CATEGORIES = ['Groceries'];
+
+  function generateFlippSid() {
+    let sid = '';
+    for (let i = 0; i < 16; i++) sid += Math.floor(Math.random() * 10);
+    return sid;
+  }
+  function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+  function flyerCategories(flyer) {
+    let categories = flyer && flyer.categories;
+    if (typeof categories === 'string') categories = categories.split(',').map(c => c.trim());
+    if (!Array.isArray(categories)) return [];
+    return categories.filter(c => typeof c === 'string' && c);
+  }
+
+  async function flippFetchJson(url, params) {
+    const search = new URLSearchParams(Object.assign({}, params, { sid: generateFlippSid() }));
+    const res = await fetch(url + '?' + search.toString());
+    if (!res.ok) throw new Error('Flipp request failed: ' + res.status);
+    return res.json();
+  }
+
+  async function fetchFlippFlyers(postalCode) {
+    const data = await flippFetchJson(FLIPP_FLYERS_URL, { locale: 'en', postal_code: postalCode });
+    return (data && Array.isArray(data.flyers)) ? data.flyers : [];
+  }
+
+  async function fetchFlippFlyerItems(flyerId) {
+    const url = FLIPP_FLYER_ITEMS_URL_TMPL.replace('{flyer_id}', encodeURIComponent(flyerId));
+    const data = await flippFetchJson(url, { locale: 'en' });
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.items)) return data.items;
+    if (data && Array.isArray(data.flyer_items)) return data.flyer_items;
+    return [];
+  }
+
+  // Fetches every Groceries-category flyer (and its items) for a postal
+  // code directly from Flipp. Returns raw {flyer, items} bundles -- exactly
+  // the unparsed shape /api/ingest-scrape expects. onProgress(done, total)
+  // is called before each flyer's items are fetched.
+  async function clientSideScrapeFlipp(postalCode, onProgress) {
+    const flyers = await fetchFlippFlyers(postalCode);
+    const selected = flyers.filter(f => flyerCategories(f).some(c => FLIPP_CATEGORIES.includes(c)));
+
+    const bundles = [];
+    for (let i = 0; i < selected.length; i++) {
+      const flyer = selected[i];
+      if (flyer.id == null) continue;
+      onProgress(i, selected.length);
+      let items;
+      try {
+        items = await fetchFlippFlyerItems(flyer.id);
+      } catch (err) {
+        continue; // one flyer failing to load shouldn't sink the rest -- same as scrape_postal_code server-side
+      }
+      bundles.push({ flyer, items });
+      await sleep(FLIPP_REQUEST_DELAY_MS);
+    }
+    return bundles;
+  }
+
+  // Runs a full client-side scrape for `code`, saves it via
+  // /api/ingest-scrape, and returns true on success (false on any failure --
+  // caller decides how to surface that). Never marks the postal code as
+  // scraped on failure, so a transient error (network blip, Flipp timeout)
+  // can naturally retry on the next visit instead of being mistaken for "we
+  // checked, and there's genuinely nothing here."
+  async function runClientSideScrapeAndSave(code) {
+    let bundles;
+    try {
+      bundles = await clientSideScrapeFlipp(code, (done, total) => {
+        document.getElementById('loading-title').textContent = 'Checking flyers near ' + code.toUpperCase() + '…';
+        document.getElementById('loading-count').textContent = total ? (done + ' / ' + total + ' flyers') : '';
+      });
+    } catch (err) {
+      return false;
+    }
+
+    document.getElementById('loading-sub').textContent = 'Saving what we found…';
+    try {
+      const res = await fetch('/api/ingest-scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postal_code: code, flyers: bundles }),
+      });
+      return res.ok;
+    } catch (err) {
+      return false;
+    }
+  }
   const STOPWORDS = new Set(["a","an","the","is","are","was","were","what","whats","where","which","who","when",
     "how","best","good","cheap","cheapest","deal","deals","on","for","to","of","in","at","buy","should","i","me",
     "my","can","you","please","find","get","some","any","this","that","week","store","stores","and","or","with",
@@ -999,11 +1104,23 @@
 
     if (allResults.length === 0) {
       // Distinct from "no matches for your filter" -- this postal code has
-      // zero data at all, which is now a normal first-time outcome (it just
-      // got queued for the next scheduled scrape), not a broken-looking void.
+      // zero data at all. Two different reasons look the same here, so the
+      // copy adapts: postalCodeScraped means we already tried a live
+      // client-side scrape and it genuinely found nothing, vs. still false
+      // meaning that attempt itself failed (network/Flipp hiccup) -- see
+      // startLoadingFor.
       listEl.innerHTML = '';
       noResultsEl.classList.remove('open');
       noPostalDataEl.classList.add('open');
+      if (postalCodeScraped) {
+        document.getElementById('no-postal-data-heading').textContent = 'No grocery flyers found for this postal code.';
+        document.getElementById('no-postal-data-body').textContent =
+          "We checked and there's currently no grocery flyer data for this area. Try a nearby postal code, or check back later as new flyers are published.";
+      } else {
+        document.getElementById('no-postal-data-heading').textContent = 'No deals for this postal code yet.';
+        document.getElementById('no-postal-data-body').innerHTML =
+          'We couldn\'t check for deals in this area just now. Try searching again, or try a postal code you know has data (e.g. <strong>M5V 2H1</strong> or <strong>V1Y 7M4</strong>).';
+      }
     } else if (matched.length === 0) {
       listEl.innerHTML = '';
       noPostalDataEl.classList.remove('open');
@@ -1428,6 +1545,8 @@
     startLoadingFor(v);
   });
 
+  let postalCodeScraped = false;
+
   async function startLoadingFor(code) {
     postalCode = code;
     localStorage.setItem('groc_postal_code', code);
@@ -1443,6 +1562,7 @@
     document.getElementById('no-results').classList.remove('open');
     document.getElementById('loading-bar').classList.add('open');
     document.getElementById('loading-title').textContent = 'Loading deals for ' + code.toUpperCase();
+    document.getElementById('loading-sub').textContent = 'You can start filtering as soon as it finishes.';
 
     try {
       let offset = 0;
@@ -1457,12 +1577,33 @@
           return;
         }
         allResults = allResults.concat(data.results || []);
+        postalCodeScraped = !!data.postal_code_scraped;
         if (!data.has_more) break;
         offset += PAGE_SIZE;
       }
     } catch (err) {
       document.getElementById('loading-bar').classList.remove('open');
       document.getElementById('status-text').textContent = 'Error: ' + err;
+      return;
+    }
+
+    // A brand-new postal code with nothing yet -- scrape it right now, in
+    // this browser, instead of just showing an empty state and waiting on
+    // the next scheduled server-side pass. postal_code_scraped (set above)
+    // is what stops this from retrying forever against a genuinely
+    // data-less area: once /api/ingest-scrape marks it scraped, the
+    // re-fetch below will see postalCodeScraped=true even if still empty.
+    if (allResults.length === 0 && !postalCodeScraped) {
+      const saved = await runClientSideScrapeAndSave(code);
+      document.getElementById('loading-bar').classList.remove('open');
+      if (!saved) {
+        // postalCodeScraped is still false here, so renderDeals()'s
+        // no-postal-data copy already reads as a retryable failure rather
+        // than "genuinely nothing here" -- no separate error message needed.
+        renderDeals();
+        return;
+      }
+      await startLoadingFor(code); // re-run now that fresh data has been stored (or confirmed empty)
       return;
     }
 

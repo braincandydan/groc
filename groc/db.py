@@ -270,6 +270,20 @@ def track_postal_code(conn, postal_code: str) -> bool:
     return inserted
 
 
+def get_postal_code_scraped_at(conn, postal_code: str) -> Union[str, None]:
+    """Returns last_scraped_at for a tracked postal code, or None if it's
+    never been scraped (including if it isn't tracked at all).
+
+    Lets a caller distinguish "haven't successfully checked this postal code
+    yet" from "checked, and there's genuinely nothing here" -- both produce
+    zero rows, but only the first should trigger another scrape attempt.
+    """
+    row = conn.execute(
+        "SELECT last_scraped_at FROM tracked_postal_codes WHERE postal_code = ?", (postal_code,)
+    ).fetchone()
+    return row["last_scraped_at"] if row else None
+
+
 def list_tracked_postal_codes(conn) -> list[str]:
     rows = conn.execute("SELECT postal_code FROM tracked_postal_codes ORDER BY postal_code").fetchall()
     return [row["postal_code"] for row in rows]

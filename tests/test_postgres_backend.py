@@ -194,3 +194,11 @@ def test_mark_postal_code_scraped_against_postgres(pg_conn):
     db.mark_postal_code_scraped(pg_conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
     row = pg_conn.execute("SELECT * FROM tracked_postal_codes WHERE postal_code = 'M5V2H1'").fetchone()
     assert row["last_scraped_at"] == "2026-08-30T06:00:00+00:00"
+
+
+def test_get_postal_code_scraped_at_against_postgres(pg_conn):
+    db.track_postal_code(pg_conn, "M5V2H1")
+    assert db.get_postal_code_scraped_at(pg_conn, "M5V2H1") is None
+
+    db.mark_postal_code_scraped(pg_conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
+    assert db.get_postal_code_scraped_at(pg_conn, "M5V2H1") == "2026-08-30T06:00:00+00:00"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -11,11 +12,24 @@ from werkzeug.exceptions import HTTPException
 
 from . import db
 from .chat import ask as chat_ask
-from .github_trigger import trigger_scrape_now
+from .scraper import DEFAULT_CATEGORIES, parse_and_store_flyer
 from .search import best_by_merchant, search_items
 
 _PLACES_PATH = Path(__file__).parent / "data" / "canadian_places.json"
 _places_cache: Optional[list] = None
+
+# Bounds on the client-submitted ingest payload -- generous enough for any
+# real postal code while keeping a single request's DB work bounded
+# regardless of what a client sends. Verified against real Flipp data for a
+# dense Toronto FSA (M5V2H1): 63 grocery-category flyers, the largest single
+# flyer (Walmart) had 933 items -- MAX_INGEST_ITEMS_PER_FLYER was originally
+# set to 500 from a guess and rejected that entire real submission; a flyer
+# over the cap is now truncated (see api_ingest_scrape), not rejected
+# outright, as a second line of defense against an even larger real flyer.
+MAX_INGEST_FLYERS = 200
+MAX_INGEST_ITEMS_PER_FLYER = 2000
+
+_POSTAL_CODE_RE = re.compile(r"^[A-Z]\d[A-Z]\d[A-Z]\d$")
 
 
 def _load_places() -> list:
@@ -46,6 +60,10 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
     app = Flask(__name__)
     app.config["DB_PATH"] = db_path
     app.config["CHAT_CLIENT"] = chat_client
+    # /api/ingest-scrape accepts client-submitted JSON (a browser's own raw
+    # Flipp fetch); this bounds the whole request body regardless of the
+    # per-list caps enforced in the handler itself.
+    app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024
 
     def _connect() -> sqlite3.Connection:
         # init_db() every connection (not just from the CLI's scrape commands)
@@ -90,17 +108,18 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
             return jsonify({"error": "'limit' and 'offset' must be integers"}), 400
 
         conn = _connect()
+        postal_code_scraped = False
         if postal_code:
             # Lets the scheduled scraper (groc scrape-tracked) pick up a
             # postal code the next time it runs, even if it has zero data
-            # right now -- see docs/PROJECT_PLAN.md Phase 5. Only the first
-            # time a postal code is seen (track_postal_code returns True)
-            # also asks the workflow to run right now instead of waiting for
-            # the next scheduled tick -- every later search of the same
-            # still-empty postal code is a no-op here, so this can't pile up
-            # duplicate runs.
-            if db.track_postal_code(conn, postal_code):
-                trigger_scrape_now(postal_code)
+            # right now -- see docs/PROJECT_PLAN.md Phase 5. A brand-new
+            # postal code with zero results gets scraped client-side instead
+            # of waiting on that schedule (see /api/ingest-scrape) -- this
+            # flag tells the frontend whether that's already happened, so it
+            # can tell "haven't checked yet" (trigger a client-side scrape)
+            # apart from "checked, genuinely nothing here" (don't retry).
+            db.track_postal_code(conn, postal_code)
+            postal_code_scraped = db.get_postal_code_scraped_at(conn, postal_code) is not None
         rows = search_items(conn, query, postal_code=postal_code, limit=limit, offset=offset)
         # Whether the client might need another page -- best_per_merchant
         # collapses rows *after* this check, since it answers "was this page
@@ -108,7 +127,68 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         has_more = len(rows) == limit
         if best_per_merchant:
             rows = best_by_merchant(rows)
-        return jsonify({"results": [_row_to_dict(r) for r in rows], "has_more": has_more})
+        return jsonify({
+            "results": [_row_to_dict(r) for r in rows],
+            "has_more": has_more,
+            "postal_code_scraped": postal_code_scraped,
+        })
+
+    @app.post("/api/ingest-scrape")
+    def api_ingest_scrape():
+        """Store a client-side scrape's raw Flipp payload.
+
+        The browser fetches Flipp's flyer/item endpoints directly (CORS is
+        open there) and POSTs the RAW, unparsed JSON here -- parsing/
+        validating prices and names happens only in parse_and_store_flyer,
+        the same trusted path the server-side scraper uses. A client must
+        never be able to pre-parse its own rows: that would mean trusting
+        arbitrary browser-submitted prices/merchants with no real
+        verification against Flipp's actual data.
+
+        Every input is untrusted: shape/size is validated defensively so a
+        malformed or oversized payload gets a clean 400, never a 500 (a
+        single bad flyer/item within an otherwise-valid payload is skipped,
+        not fatal -- see parse_and_store_flyer).
+        """
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "invalid JSON body"}), 400
+
+        postal_code = _normalize_postal_code(payload.get("postal_code"))
+        if not postal_code or not _POSTAL_CODE_RE.match(postal_code):
+            return jsonify({"error": "invalid or missing 'postal_code'"}), 400
+
+        flyers_payload = payload.get("flyers")
+        if not isinstance(flyers_payload, list):
+            return jsonify({"error": "'flyers' must be a list"}), 400
+        if len(flyers_payload) > MAX_INGEST_FLYERS:
+            return jsonify({"error": f"too many flyers (max {MAX_INGEST_FLYERS})"}), 400
+
+        for entry in flyers_payload:
+            if not isinstance(entry, dict):
+                return jsonify({"error": "each entry in 'flyers' must be an object"}), 400
+            if not isinstance(entry.get("flyer"), dict):
+                return jsonify({"error": "each entry needs a 'flyer' object"}), 400
+            if not isinstance(entry.get("items"), list):
+                return jsonify({"error": "each entry needs an 'items' list"}), 400
+
+        conn = _connect()
+        total_stored = 0
+        for entry in flyers_payload:
+            # Truncate rather than reject the whole request over one large
+            # flyer -- confirmed against real Flipp data that a single
+            # big-box flyer can genuinely have 900+ items (Walmart, a real
+            # M5V2H1 flyer, had 933), so rejecting the entire ~60-flyer
+            # submission over one legitimately large flyer would silently
+            # discard everything else that was actually fine.
+            items = entry["items"][:MAX_INGEST_ITEMS_PER_FLYER]
+            total_stored += parse_and_store_flyer(
+                conn, entry["flyer"], items, postal_code, categories=DEFAULT_CATEGORIES,
+            )
+
+        db.track_postal_code(conn, postal_code)
+        db.mark_postal_code_scraped(conn, postal_code, db.utcnow_iso())
+        return jsonify({"stored": total_stored})
 
     @app.post("/api/ask")
     def api_ask():

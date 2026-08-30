@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Iterable, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
 from . import db
 from .flipp_client import FlippClient
@@ -20,7 +20,15 @@ def _flyer_categories(flyer: dict) -> set[str]:
     categories = flyer.get("categories", [])
     if isinstance(categories, str):
         categories = [c.strip() for c in categories.split(",")]
-    return {c for c in categories if c}
+    # Defensive: flyer data used to only ever come from a trusted server-side
+    # Flipp response, but now can also arrive as client-submitted JSON via the
+    # /api/ingest-scrape endpoint (browser scrapes Flipp directly, then POSTs
+    # the raw payload here to be parsed/stored) -- a malformed or malicious
+    # `categories` value (e.g. a number, null) must not crash this, just be
+    # treated as "no categories".
+    if not isinstance(categories, (list, tuple, set)):
+        return set()
+    return {c for c in categories if isinstance(c, str) and c}
 
 
 def _select_flyers(flyers: Sequence[dict], categories: Optional[set[str]]) -> list[dict]:
@@ -39,10 +47,22 @@ def _price_source_text(item: dict) -> str:
     return ""
 
 
+def _as_str_or_none(value: Any) -> Optional[str]:
+    # Defensive coercion for fields that go straight into a DB column typed
+    # TEXT: a trusted server-side Flipp response only ever has str/None here,
+    # but client-submitted JSON (via /api/ingest-scrape) could contain
+    # anything -- an unexpected type (a dict, a list) would otherwise reach
+    # the DB adapter and raise, turning one bad row into a 500 for the whole
+    # request. Dropping it to None is safer than guessing a stringification.
+    if value is None or isinstance(value, str):
+        return value
+    return None
+
+
 def _build_row(
     item: dict, merchant: str, flyer_id: int, postal_code: str, scraped_at: str, category: str = "",
 ) -> dict:
-    name = item.get("name") or item.get("item_name") or ""
+    name = str(item.get("name") or item.get("item_name") or "")
     parsed = parse_price(_price_source_text(item), item_name=name)
     return {
         "merchant": merchant,
@@ -55,13 +75,59 @@ def _build_row(
         "unit_label": parsed.unit_label,
         "deal_quantity": parsed.deal_quantity,
         "package_size": parsed.package_size,
-        "valid_from": item.get("valid_from"),
-        "valid_to": item.get("valid_to"),
+        "valid_from": _as_str_or_none(item.get("valid_from")),
+        "valid_to": _as_str_or_none(item.get("valid_to")),
         "postal_code": postal_code,
         "scraped_at": scraped_at,
-        "cutout_image_url": item.get("cutout_image_url"),
+        "cutout_image_url": _as_str_or_none(item.get("cutout_image_url")),
         "category": category,
     }
+
+
+def parse_and_store_flyer(
+    conn,
+    flyer: dict,
+    items: Sequence[Any],
+    postal_code: str,
+    categories: Optional[set[str]] = DEFAULT_CATEGORIES,
+) -> int:
+    """Parse one already-fetched flyer's raw items and store them. Returns row count stored.
+
+    This is the one place price/name parsing happens, shared by both the
+    server-side scrape (`scrape_postal_code`, fed by a live FlippClient call)
+    and the client-side ingest endpoint (fed by a browser's own raw fetch
+    from Flipp, POSTed here as unparsed JSON). Never trust a client to parse
+    its own prices/names -- that would let it fabricate arbitrary data
+    straight into the DB. Every input here is treated as untrusted: the
+    category filter, flyer_id, and every item are re-validated regardless of
+    which path called this.
+    """
+    if categories and not (_flyer_categories(flyer) & categories):
+        return 0
+
+    try:
+        flyer_id = int(flyer.get("id"))
+    except (TypeError, ValueError):
+        logger.warning("skipping flyer with invalid/missing id for postal_code=%s: %r", postal_code, flyer.get("id"))
+        return 0
+
+    merchant = str(flyer.get("merchant") or "Unknown")[:200]
+    category = ",".join(sorted(_flyer_categories(flyer)))
+    scraped_at = db.utcnow_iso()
+
+    rows = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            rows.append(_build_row(item, merchant, flyer_id, postal_code, scraped_at, category=category))
+        except Exception:
+            logger.warning("skipping malformed item for postal_code=%s flyer_id=%s", postal_code, flyer_id)
+            continue
+
+    stored = db.upsert_items(conn, rows)
+    logger.info("merchant=%s flyer_id=%s stored %d items", merchant, flyer_id, stored)
+    return stored
 
 
 def scrape_postal_code(
@@ -90,11 +156,9 @@ def scrape_postal_code(
             logger.exception("failed to fetch items for flyer_id=%s merchant=%s", flyer_id, merchant)
             continue
 
-        category = ",".join(sorted(_flyer_categories(flyer)))
-        scraped_at = db.utcnow_iso()
-        rows = [_build_row(item, merchant, flyer_id, postal_code, scraped_at, category=category) for item in items]
-        total_rows += db.upsert_items(conn, rows)
-        logger.info("merchant=%s flyer_id=%s stored %d items", merchant, flyer_id, len(rows))
+        # categories=None: `selected` is already category-filtered above, and
+        # re-filtering here is harmless but redundant for this trusted path.
+        total_rows += parse_and_store_flyer(conn, flyer, items, postal_code, categories=None)
 
     return total_rows
 

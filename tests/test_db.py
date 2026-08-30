@@ -160,3 +160,27 @@ def test_mark_postal_code_scraped_sets_timestamp():
 
     row = conn.execute("SELECT * FROM tracked_postal_codes WHERE postal_code = 'M5V2H1'").fetchone()
     assert row["last_scraped_at"] == "2026-08-30T06:00:00+00:00"
+
+
+def test_get_postal_code_scraped_at_returns_none_when_never_scraped():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    db.track_postal_code(conn, "M5V2H1")
+
+    assert db.get_postal_code_scraped_at(conn, "M5V2H1") is None
+
+
+def test_get_postal_code_scraped_at_returns_none_when_not_tracked_at_all():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+
+    assert db.get_postal_code_scraped_at(conn, "X1Y2Z3") is None
+
+
+def test_get_postal_code_scraped_at_returns_timestamp_after_marking_scraped():
+    conn = db.connect(":memory:")
+    db.init_db(conn)
+    db.track_postal_code(conn, "M5V2H1")
+    db.mark_postal_code_scraped(conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
+
+    assert db.get_postal_code_scraped_at(conn, "M5V2H1") == "2026-08-30T06:00:00+00:00"

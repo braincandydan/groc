@@ -187,24 +187,28 @@ gh secret set DATABASE_URL --body "postgresql://...(from Vercel/Neon)..."
 Trigger it manually to test before waiting for the schedule: Actions tab →
 "Scheduled flyer scrape" → Run workflow.
 
-**Cutting the wait further**: the first search of a brand-new postal code
-also asks the workflow to run *immediately* instead of waiting for the next
-scheduled tick (`groc/github_trigger.py`, called from `/api/search`) — a
-search still can't wait for the scrape itself (same 30-90+ second problem),
-but it doesn't have to wait a full day for the next scheduled run either.
-Only the first search of a given postal code triggers this; every repeat
-search of the same still-empty postal code is a no-op, so it can't pile up
-duplicate runs.
+**Cutting the wait further — client-side scraping**: a search still can't
+wait for a server-side scrape itself (30-90+ seconds, longer than a single
+web request should run), so a brand-new postal code with zero results is
+instead scraped by the *browser that searched it*: Flipp's API sets
+`Access-Control-Allow-Origin: *`, so client-side JS in `templates/index.html`
+fetches the same flyer/item endpoints `groc/flipp_client.py` uses directly,
+then POSTs the raw (unparsed) JSON to `/api/ingest-scrape`. That endpoint
+runs it through the exact same parsing path the server-side scraper uses
+(`groc/scraper.py`'s `parse_and_store_flyer`) — a client only ever supplies
+raw Flipp responses, never pre-parsed prices/names, so it can't fabricate
+data. `/api/search` reports whether a postal code has already been
+successfully scraped at least once (`postal_code_scraped`), so this only
+fires the first time a postal code comes up empty, not on every repeat visit
+to a genuinely data-less area. The daily scheduled workflow above still
+re-scrapes everything server-side for freshness; this just removes the wait
+for brand-new areas.
 
-**One-time setup** for this part: create a
-[fine-grained personal access token](https://github.com/settings/tokens?type=beta)
-scoped to just this repository with **Actions: Read and write** permission
-(don't reuse a broad personal-account token here — this one gets deployed to
-production). Add it as a Vercel environment variable named
-`GH_DISPATCH_TOKEN` (Project Settings → Environment Variables), then
-redeploy. Without it, `trigger_scrape_now()` just logs and no-ops — the
-daily schedule still covers everything, this only makes new postal codes
-faster.
+An earlier version of this instead asked the GitHub Actions workflow to run
+immediately (`groc/github_trigger.py`) — removed because it re-ran the same
+"scrape everything tracked" job rather than just the new postal code, so its
+actual latency grew with every postal code ever tracked instead of staying
+fast.
 
 ## Database schema
 
