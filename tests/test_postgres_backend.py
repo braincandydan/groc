@@ -19,6 +19,7 @@ actually backend-agnostic.
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import pytest
@@ -203,6 +204,41 @@ def test_get_postal_code_scraped_at_against_postgres(pg_conn):
 
     db.mark_postal_code_scraped(pg_conn, "M5V2H1", "2026-08-30T06:00:00+00:00")
     assert db.get_postal_code_scraped_at(pg_conn, "M5V2H1") == "2026-08-30T06:00:00+00:00"
+
+
+def test_init_db_survives_concurrent_migration_of_a_fresh_database():
+    # Real production bug: webapp.py calls init_db() on every request, which
+    # is normally a no-op once the schema exists -- but on a database that's
+    # never had a given table (e.g. right after this code first deploys),
+    # many concurrent serverless invocations raced to CREATE TABLE at once
+    # and Postgres raised a genuine DeadlockDetected, not just clean
+    # contention -- every request caught in it 500'd. This drops every table
+    # and fires init_db() from many threads/connections at once to confirm
+    # the advisory-lock fix actually serializes them instead of racing.
+    conn = db.connect(DSN)
+    conn.execute("DROP TABLE IF EXISTS ingest_tokens")
+    conn.execute("DROP TABLE IF EXISTS tracked_postal_codes")
+    conn.execute("DROP TABLE IF EXISTS flyer_items")
+    conn.commit()
+    conn.close()
+
+    def _migrate():
+        c = db.connect(DSN)
+        db.init_db(c)
+        c.close()
+
+    with ThreadPoolExecutor(max_workers=15) as pool:
+        futures = [pool.submit(_migrate) for _ in range(15)]
+        for f in futures:
+            f.result()  # re-raises if any thread's init_db() call failed
+
+    conn = db.connect(DSN)
+    assert db.upsert_items(conn, [{
+        "merchant": "No Frills", "flyer_id": 1, "item_name": "Chicken Breast", "raw_price_text": "$4.99",
+        "price": 4.99, "was_price": None, "unit_price": None, "unit_label": None, "deal_quantity": None,
+        "package_size": None, "valid_from": "2026-08-24", "valid_to": "2026-08-30", "postal_code": "M5V2H1",
+        "scraped_at": "2026-08-24T00:00:00+00:00", "cutout_image_url": None, "category": "Groceries",
+    }]) == 1
 
 
 def test_ingest_token_issue_and_redeem_against_postgres(pg_conn):

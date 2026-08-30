@@ -231,8 +231,28 @@ def connect(db_path: Union[str, Path]):
     return conn
 
 
+# Arbitrary fixed key for a Postgres advisory lock -- serializes concurrent
+# migration attempts (see init_db() below). Any stable constant works; this
+# one has no special meaning.
+_MIGRATION_LOCK_KEY = 749201337
+
+
 def init_db(conn) -> None:
     if isinstance(conn, _PgConnection):
+        # _connect() (webapp.py) calls this on every request, not just once
+        # -- fine normally since CREATE TABLE IF NOT EXISTS is a cheap no-op
+        # once the schema exists. But on a database that's never had a given
+        # table (e.g. right after this code first deploys), many concurrent
+        # serverless invocations can all race to create it at the same
+        # moment -- confirmed via a real concurrency test that plain
+        # "IF NOT EXISTS" isn't sufficient protection here: Postgres raised a
+        # genuine DeadlockDetected under concurrent CREATE TABLE, not just
+        # clean contention, and every request caught in it 500'd. A
+        # transaction-scoped advisory lock serializes migration attempts
+        # instead: everyone else just waits briefly for the lock rather than
+        # racing on the same DDL. Auto-released by the commit() below --
+        # nothing to explicitly unlock.
+        conn.execute("SELECT pg_advisory_xact_lock(%s)", (_MIGRATION_LOCK_KEY,))
         conn.executescript(_POSTGRES_SCHEMA)
         for column, coltype in _ADDED_COLUMNS:
             conn.execute(f"ALTER TABLE flyer_items ADD COLUMN IF NOT EXISTS {column} {coltype}")
