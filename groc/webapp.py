@@ -50,14 +50,19 @@ def create_app(db_path: str = "groc.db", chat_client=None) -> Flask:
         best_per_merchant = request.args.get("best_per_merchant") in ("1", "true", "yes")
         try:
             limit = int(request.args.get("limit", 20))
+            offset = int(request.args.get("offset", 0))
         except ValueError:
-            return jsonify({"error": "'limit' must be an integer"}), 400
+            return jsonify({"error": "'limit' and 'offset' must be integers"}), 400
 
         conn = _connect()
-        rows = search_items(conn, query, postal_code=postal_code, limit=limit)
+        rows = search_items(conn, query, postal_code=postal_code, limit=limit, offset=offset)
+        # Whether the client might need another page -- best_per_merchant
+        # collapses rows *after* this check, since it answers "was this page
+        # of the underlying data full", not "did filtering leave more to show".
+        has_more = len(rows) == limit
         if best_per_merchant:
             rows = best_by_merchant(rows)
-        return jsonify({"results": [_row_to_dict(r) for r in rows]})
+        return jsonify({"results": [_row_to_dict(r) for r in rows], "has_more": has_more})
 
     @app.post("/api/ask")
     def api_ask():

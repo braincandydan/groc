@@ -84,6 +84,35 @@ def test_search_respects_limit():
     assert len(result) == 2
 
 
+def test_search_offset_returns_next_page():
+    rows = [_row(flyer_id=i, item_name=f"Chicken Breast {i}", price=float(i)) for i in range(5)]
+    conn = _conn_with(*rows)
+    page1 = search_items(conn, "chicken", limit=2, offset=0)
+    page2 = search_items(conn, "chicken", limit=2, offset=2)
+    assert [r["item_name"] for r in page1] == ["Chicken Breast 0", "Chicken Breast 1"]
+    assert [r["item_name"] for r in page2] == ["Chicken Breast 2", "Chicken Breast 3"]
+
+
+def test_search_pagination_covers_every_row_with_no_dupes_or_skips():
+    # Tied prices could be ordered arbitrarily by the DB engine without a
+    # stable tiebreaker, causing a row to be skipped or repeated across pages.
+    rows = [_row(flyer_id=i, item_name=f"Chicken Breast {i}", price=4.99) for i in range(7)]
+    conn = _conn_with(*rows)
+
+    seen = []
+    offset = 0
+    page_size = 3
+    while True:
+        page = search_items(conn, "chicken", limit=page_size, offset=offset)
+        seen.extend(r["item_name"] for r in page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+
+    assert sorted(seen) == sorted(f"Chicken Breast {i}" for i in range(7))
+    assert len(seen) == len(set(seen))
+
+
 def test_search_special_characters_are_escaped():
     conn = _conn_with(_row(item_name="100% Whole Wheat Bread"))
     # A literal "%" in the query shouldn't act as a wildcard.

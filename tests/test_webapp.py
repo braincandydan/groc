@@ -103,6 +103,34 @@ def test_api_search_postal_code_is_case_and_space_insensitive(app_and_db):
     assert data["results"][0]["merchant"] == "No Frills"
 
 
+def test_api_search_offset_pagination(app_and_db):
+    conn = db.connect(app_and_db.config["DB_PATH"])
+    db.upsert_items(conn, [_row(flyer_id=i, item_name=f"Chicken Breast {i}", price=float(i)) for i in range(2, 6)])
+
+    client = app_and_db.test_client()
+    page1 = client.get("/api/search?q=chicken&limit=2&offset=0").get_json()
+    page2 = client.get("/api/search?q=chicken&limit=2&offset=2").get_json()
+
+    names1 = {r["item_name"] for r in page1["results"]}
+    names2 = {r["item_name"] for r in page2["results"]}
+    assert len(page1["results"]) == 2
+    assert names1.isdisjoint(names2)
+
+
+def test_api_search_has_more_flag(app_and_db):
+    conn = db.connect(app_and_db.config["DB_PATH"])
+    conn.execute("DELETE FROM flyer_items")  # app_and_db's fixture row also matches "chicken"; start from a known count
+    conn.commit()
+    db.upsert_items(conn, [_row(flyer_id=i, item_name=f"Chicken Breast {i}") for i in range(3)])
+
+    client = app_and_db.test_client()
+    full_page = client.get("/api/search?q=chicken&limit=2").get_json()
+    last_page = client.get("/api/search?q=chicken&limit=2&offset=2").get_json()
+
+    assert full_page["has_more"] is True
+    assert last_page["has_more"] is False
+
+
 def test_api_search_best_per_merchant(app_and_db):
     conn = db.connect(app_and_db.config["DB_PATH"])
     db.upsert_items(conn, [_row(flyer_id=2, merchant="No Frills", item_name="Chicken Breast Value Pack", price=9.99)])

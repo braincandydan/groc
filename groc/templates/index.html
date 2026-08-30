@@ -110,25 +110,37 @@ loadForm.addEventListener('submit', async (e) => {
   }
 
   const statusEl = document.getElementById('search-status');
-  statusEl.textContent = 'Loading...';
+  const PAGE_SIZE = 500;
+  const MAX_PAGES = 50; // safety cap: 25,000 rows, well beyond any real postal code
 
-  const params = new URLSearchParams({ postal_code: postalCode, limit: 500 });
-  const url = '/api/search?' + params.toString();
-  console.log('[groc] fetching', url);
+  allResults = [];
+  document.getElementById('filter-query').disabled = true;
+  document.getElementById('best-per-merchant').disabled = true;
 
   try {
-    const res = await fetch(url);
-    console.log('[groc] response status', res.status);
-    const data = await res.json();
-    console.log('[groc] response json', data);
+    let offset = 0;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      statusEl.textContent = 'Loading... (' + allResults.length + ' items so far)';
+      const params = new URLSearchParams({ postal_code: postalCode, limit: PAGE_SIZE, offset });
+      const url = '/api/search?' + params.toString();
+      console.log('[groc] fetching page', page, url);
 
-    if (!res.ok) {
-      statusEl.textContent = 'Error: ' + (data.error || res.status);
-      console.error('[groc] search request failed', data);
-      return;
+      const res = await fetch(url);
+      const data = await res.json();
+      console.log('[groc] page', page, 'response status', res.status, 'json', data);
+
+      if (!res.ok) {
+        statusEl.textContent = 'Error: ' + (data.error || res.status);
+        console.error('[groc] search request failed', data);
+        return;
+      }
+
+      const pageResults = data.results || [];
+      allResults = allResults.concat(pageResults);
+      if (!data.has_more) break;
+      offset += PAGE_SIZE;
     }
 
-    allResults = data.results || [];
     console.log('[groc] allResults set, length =', allResults.length);
 
     document.getElementById('filter-query').disabled = false;

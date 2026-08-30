@@ -16,12 +16,19 @@ def search_items(
     query: str,
     postal_code: Optional[str] = None,
     limit: int = 50,
+    offset: int = 0,
 ) -> list[sqlite3.Row]:
     """Return matching flyer_items rows, cheapest-effective-price first.
 
     An empty/blank query means "no item-name filter" — e.g. just list every
-    item for a postal code, so a client can fetch everything once and filter
-    it further client-side.
+    item for a postal code, so a client can page through everything and
+    filter it further client-side.
+
+    `offset` paginates: fetch repeatedly with offset += limit until a page
+    comes back shorter than `limit` to get every matching row. The ORDER BY
+    ends with `id ASC` as a tiebreaker specifically so paging is stable --
+    without it, rows with equal price could be ordered arbitrarily by the
+    DB engine and skip or repeat across page boundaries.
     """
     tokens = query.strip().split()
     where = ["LOWER(item_name) LIKE ? ESCAPE '\\'"] * len(tokens)
@@ -38,10 +45,12 @@ def search_items(
         ORDER BY
             CASE WHEN COALESCE(unit_price, price) IS NULL THEN 1 ELSE 0 END,
             CASE WHEN unit_price IS NOT NULL THEN unit_price ELSE price END ASC,
-            price ASC
-        LIMIT ?
+            price ASC,
+            id ASC
+        LIMIT ? OFFSET ?
     """
     params.append(limit)
+    params.append(offset)
     return conn.execute(sql, params).fetchall()
 
 
