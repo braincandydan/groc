@@ -24,7 +24,7 @@ def search_items(
     it further client-side.
     """
     tokens = query.strip().split()
-    where = ["item_name LIKE ? ESCAPE '\\'"] * len(tokens)
+    where = ["LOWER(item_name) LIKE ? ESCAPE '\\'"] * len(tokens)
     params: list = [_like_pattern(t) for t in tokens]
 
     if postal_code:
@@ -92,5 +92,9 @@ def best_by_merchant(rows: list[sqlite3.Row]) -> list[sqlite3.Row]:
 
 
 def _like_pattern(token: str) -> str:
-    escaped = token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    # Matched against LOWER(item_name), so lowercase here too: SQLite's LIKE
+    # happens to be case-insensitive by default but Postgres's isn't -- this
+    # makes the match explicit and correct on both instead of relying on that
+    # SQLite-specific default.
+    escaped = token.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"

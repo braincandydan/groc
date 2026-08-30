@@ -99,8 +99,50 @@ pip install -e ".[prod]"
 GROC_DB_PATH=/path/to/groc.db gunicorn groc.wsgi:app
 ```
 
-Actually hosting this (choosing a provider, domain, deployment pipeline) is
-still an open decision — see Phase 5 in `docs/PROJECT_PLAN.md`.
+## Deploying on Vercel
+
+Vercel runs the app as serverless functions with no persistent local disk, so
+the SQLite file used everywhere above doesn't work there — `groc/db.py`
+supports Postgres too for exactly this case. `db.connect()` picks the backend
+automatically: pass it a `postgres://`/`postgresql://` URL and it uses
+Postgres; anything else is treated as a SQLite file path. Every CLI command
+(`scrape`, `search`, `ask`, `serve`) already works against either, unchanged
+— just pass a Postgres URL as `--db`.
+
+To deploy:
+
+1. **Add a Postgres database** — in the Vercel dashboard, add Vercel Postgres
+   (powered by Neon) or Neon directly from the Storage tab. Free tier is
+   plenty for this. This auto-injects a `DATABASE_URL` (or `POSTGRES_URL`)
+   env var into your deployment, which `groc/wsgi.py` picks up automatically.
+2. **Connect the GitHub repo** to a new Vercel project — Vercel auto-detects
+   the Flask app via `pyproject.toml`'s `[tool.vercel] entrypoint` and
+   deploys it with no further config.
+3. **Populate the database** — the scraper still needs to run somewhere with
+   real Python execution and enough time to hit Flipp's API repeatedly
+   (Vercel's serverless functions are the wrong shape for this). From your
+   own machine or existing cron setup, point the same CLI at the hosted DB
+   using the connection string from step 1:
+   ```bash
+   pip install -e ".[postgres]"
+   python -m groc.cli scrape -p M5V2H1 --db "postgresql://...(from Vercel/Neon)..."
+   ```
+   Re-run this on a schedule (e.g. your existing local cron) to keep data
+   fresh; the deployed web app just reads whatever's in that database.
+
+Local Postgres testing (without touching the real deployment) — the test
+suite includes a set of backend-parity tests, skipped unless you point them
+at a real Postgres instance:
+
+```bash
+docker run -d --name groc-test-pg -e POSTGRES_PASSWORD=groc \
+    -e POSTGRES_DB=groc -p 5544:5432 postgres:16
+GROC_TEST_POSTGRES_DSN=postgresql://postgres:groc@localhost:5544/groc pytest tests/test_postgres_backend.py
+```
+
+Non-Vercel hosting (Render/Railway/Fly.io, with normal persistent disk) still
+works exactly as described above with a local SQLite file — no Postgres
+needed for those.
 
 ## Scheduling
 
