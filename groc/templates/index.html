@@ -183,9 +183,13 @@
   .was-price { font-size: 11.5px; color: #8A6712; text-decoration: line-through; }
   .cur-price { font-size: 21px; font-weight: 800; color: var(--pine); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
   .price-suffix { font-size: 11px; font-weight: 600; color: var(--meta); }
-  .list-btn { margin-top: 2px; height: 24px; padding: 0 8px; border: 1.5px solid var(--pine); background: none; font-size: 11px; font-weight: 800; letter-spacing: .06em; color: var(--pine); }
+  /* min-height 40px / padded hit area on .remove-btn: both were well under
+     the ~44px minimum comfortable tap target on a real phone (measured 24px
+     and 12px respectively) -- the negative margin on .remove-btn keeps its
+     visual size/position in the row unchanged while growing the tappable area. */
+  .list-btn { margin-top: 2px; min-height: 40px; padding: 0 10px; border: 1.5px solid var(--pine); background: none; font-size: 11px; font-weight: 800; letter-spacing: .06em; color: var(--pine); }
   .list-btn.listed { background: var(--marigold); }
-  .remove-btn { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); background: none; border: none; padding: 0; }
+  .remove-btn { font-size: 11px; font-weight: 700; letter-spacing: .05em; color: var(--muted); background: none; border: none; padding: 14px 8px; margin: -14px -8px; }
 
   #no-postal-data { display: none; padding: 32px 24px; }
   #no-postal-data.open { display: block; }
