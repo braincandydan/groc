@@ -877,12 +877,21 @@
     try { localStorage.setItem('groc_my_list', JSON.stringify(myList)); } catch (e) { /* storage unavailable */ }
   }
   function isListed(row) { return myList.some(r => r.id === row.id); }
+  // The one shared toggle behind every "+ LIST" entry point in the app (the
+  // Deals tab, an inline matched-deal pin, and the matches-sheet carousel) --
+  // hooking the event here rather than at each call site covers all three at
+  // once instead of tracking them separately.
   function toggleListed(row) {
-    if (isListed(row)) { myList = myList.filter(r => r.id !== row.id); }
-    // Copy rather than push the same reference -- My List rows carry their
-    // own `pickedUp` state (the shopping check-off), which must not also
-    // strike through the same item back in the Deals tab.
-    else { myList.push(Object.assign({}, row)); }
+    if (isListed(row)) {
+      myList = myList.filter(r => r.id !== row.id);
+      trackEvent('deal_unlisted', { merchant: row.merchant });
+    } else {
+      // Copy rather than push the same reference -- My List rows carry their
+      // own `pickedUp` state (the shopping check-off), which must not also
+      // strike through the same item back in the Deals tab.
+      myList.push(Object.assign({}, row));
+      trackEvent('deal_listed', { merchant: row.merchant });
+    }
     saveMyList();
   }
 
@@ -1075,6 +1084,15 @@
     if (state.previouslyFocused && document.body.contains(state.previouslyFocused)) {
       state.previouslyFocused.focus();
     }
+  }
+
+  // ---------- Analytics ----------
+  // gtag() is defined inline in <head> (not by the async-loaded script
+  // itself), so it's always callable here even if the GA request is blocked
+  // by an ad blocker -- it just pushes into dataLayer with nothing consuming
+  // it, which is a harmless no-op, not a throw.
+  function trackEvent(name, params) {
+    gtag('event', name, params || {});
   }
 
   // ---------- Toast (undo-able confirmations) ----------
@@ -1927,6 +1945,7 @@
   function archiveMyList() {
     if (!myList.length && !shoppingList.length) return;
     if (currentMatchesItem) closeMatchesSheet(); // its item is about to be cleared out from under it
+    trackEvent('list_archived', { deal_count: myList.length, shopping_item_count: shoppingList.length });
     const dealsSnapshot = myList.slice();
     const shoppingSnapshot = shoppingList.slice();
     let archive = [];
@@ -1963,6 +1982,7 @@
     if (addedTexts.length) {
       renderMyList();
       renderDeals(); // new items can newly match rows already shown on the Deals tab
+      trackEvent('shopping_list_item_added', { count: addedTexts.length });
       showToast(addedTexts.length === 1
         ? 'Added ' + addedTexts[0] + '.'
         : 'Added ' + addedTexts.length + ' items to your list.');
@@ -1973,6 +1993,7 @@
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       currentTab = btn.dataset.tab;
+      trackEvent('tab_switch', { tab: currentTab });
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
       document.getElementById('deals-view').style.display = currentTab === 'deals' ? 'block' : 'none';
       document.getElementById('mylist-view').classList.toggle('open', currentTab === 'mylist');
@@ -2058,10 +2079,16 @@
     listEl.querySelectorAll('.city-picker-item').forEach(btn => {
       btn.addEventListener('click', () => {
         closeCityPicker();
+        pendingSearchMethod = 'city_picker';
         submitVerifiedPostalCode(btn.dataset.postal);
       });
     });
   }
+
+  // Set by the city-picker/geolocation call sites right before they trigger
+  // a submit, so startLoadingFor's single search_deals event can tell them
+  // apart from a typed submission -- see the comment there.
+  let pendingSearchMethod = 'typed';
 
   // Reuse the existing validated submit flow rather than duplicating it --
   // callers here (city picker, "Use my location") only ever pass real,
@@ -2147,6 +2174,7 @@
 
   async function useMyLocation(triggerBtn) {
     if (!navigator.geolocation) {
+      trackEvent('geolocation_used', { result: 'unsupported' });
       showToast("Location isn't supported by this browser. Try choosing your city instead.");
       return;
     }
@@ -2160,16 +2188,21 @@
       triggerBtn.textContent = '📍 Finding your area…';
       await loadFsaCentroids();
       if (fsaCentroids.length === 0) {
+        trackEvent('geolocation_used', { result: 'no_centroid_data' });
         showToast("Couldn't look up your area right now. Try choosing your city instead.");
         return;
       }
       const postal = nearestPostalCode(position.coords.latitude, position.coords.longitude);
       if (!postal) {
+        trackEvent('geolocation_used', { result: 'no_match' });
         showToast("Couldn't match your location to a postal code. Try choosing your city instead.");
         return;
       }
+      trackEvent('geolocation_used', { result: 'success' });
+      pendingSearchMethod = 'geolocation';
       submitVerifiedPostalCode(postal);
     } catch (err) {
+      trackEvent('geolocation_used', { result: 'error', error_code: err && err.code });
       showToast(geolocationErrorMessage(err));
     } finally {
       triggerBtn.disabled = false;
@@ -2236,6 +2269,15 @@
   let pendingIngestToken = null;
 
   async function startLoadingFor(code) {
+    // The single real entry point for "a search happened" -- onboarding-form,
+    // postal-edit-row, the city picker, and "use my location" all funnel here
+    // (the latter two via submitVerifiedPostalCode()'s requestSubmit(), which
+    // re-triggers the same form submit handlers), so hooking here instead of
+    // each call site avoids double-firing. pendingSearchMethod is set by the
+    // city-picker/geolocation call sites right before they trigger a submit,
+    // and reset to the 'typed' default immediately after being read.
+    trackEvent('search_deals', { method: pendingSearchMethod, fsa: code.slice(0, 3).toUpperCase() });
+    pendingSearchMethod = 'typed';
     postalCode = code;
     localStorage.setItem('groc_postal_code', code);
     document.getElementById('onboarding').style.display = 'none';
