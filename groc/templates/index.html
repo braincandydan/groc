@@ -231,15 +231,18 @@
      so without this the red backdrop bled through on top of the row even
      while fully closed. */
   .swipe-bg { position: absolute; top: 0; bottom: 0; right: 0; width: 84px; z-index: 0; background: var(--red); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
-  .swipe-wrap .deal-row { position: relative; z-index: 1; transition: transform .2s ease; will-change: transform; }
-  .swipe-wrap .deal-row.swiping { transition: none; }
-  /* Once fully revealed, the swipe backdrop's red REMOVE *is* the visible
+  /* .swipe-target (not .deal-row specifically) is the dragged layer -- lets
+     matched-deal-row (which isn't a .deal-row) reuse the exact same
+     swipe-to-remove/dismiss gesture via attachSwipeHandlers. */
+  .swipe-wrap .swipe-target { position: relative; z-index: 1; transition: transform .2s ease; will-change: transform; }
+  .swipe-wrap .swipe-target.swiping { transition: none; }
+  /* Once fully revealed, the swipe backdrop's red label *is* the visible
      affordance -- fade out the static REMOVE button so a swiped-open row
      doesn't show two REMOVE labels side by side. It's a swipe/mouse-drag-
      only state (dataset.revealed is never set by keyboard interaction), so
      a keyboard/screen-reader user always reaches the always-present static
      button unaffected by this. */
-  .swipe-wrap .deal-row[data-revealed="1"] .remove-btn { opacity: 0; pointer-events: none; }
+  .swipe-wrap .swipe-target[data-revealed="1"] .remove-btn { opacity: 0; pointer-events: none; }
 
   #mylist-archive-row { display: none; padding: 14px 16px; text-align: center; border-top: 1.5px solid var(--divider); }
   #mylist-archive-row.open { display: block; }
@@ -284,18 +287,34 @@
   .shopping-row { background: var(--cream); }
   .shopping-item-name { font-weight: 700; }
   /* Matched-deal sub-rows nest under a shopping-list item -- indented to
-     roughly align under its text (past the 40px check-toggle + 12px gap),
-     not swipeable/removable themselves since the underlying shopping-list
-     item is what owns removal. */
-  .matched-deals { display: flex; flex-direction: column; padding: 2px 16px 8px 56px; gap: 6px; background: var(--cream); }
-  .matched-deal-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+     roughly align under its text (past the 40px check-toggle + 12px gap).
+     Wrapped in the same swipe-wrap/swipe-target pattern as every other row
+     in the app so a match can be swiped away ("not interested"), which is
+     why each row needs its own opaque background (var(--cream), matching
+     the container) -- otherwise the swipe-bg behind it would bleed through
+     while closed, the same bug class fixed earlier for .deal-row.row-done. */
+  .matched-deals { display: flex; flex-direction: column; padding: 4px 16px 10px 56px; gap: 10px; background: var(--cream); }
+  .matched-deal-row {
+    display: flex; align-items: center; gap: 10px; padding: 5px 0; background: var(--cream); cursor: pointer;
+  }
+  /* min-width:0 on the name is load-bearing: without it, a long real
+     merchant/item name (e.g. "Real Canadian Superstore" / "President's
+     Choice Free From Chicken Breast Value Pack") refuses to shrink inside
+     the flex row and pushes the price + pin button into each other instead
+     of eliding -- confirmed by seeding exactly that data and looking at it,
+     not by reading the CSS. */
   .matched-deal-name { flex: 1; min-width: 0; font-size: 13px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .matched-deal-price { flex: none; font-size: 13px; font-weight: 700; color: var(--pine); font-variant-numeric: tabular-nums; }
   /* Padding + negative margin grows the tap target to ~40px without
-     enlarging the glyph, same trick as .remove-btn/.list-btn above. */
-  .matched-deal-list-btn { flex: none; font-size: 12px; font-weight: 800; color: var(--pine); background: none; border: 1.5px solid var(--pine); padding: 10px 9px; margin: -10px -4px -10px 0; }
+     enlarging the glyph, same trick as .remove-btn/.list-btn above.
+     min-width keeps "+" and "✓" the same footprint so the row doesn't
+     reflow when a match gets pinned. */
+  .matched-deal-list-btn { flex: none; min-width: 32px; text-align: center; font-size: 12px; font-weight: 800; color: var(--pine); background: none; border: 1.5px solid var(--pine); padding: 10px 9px; margin: -10px -4px -10px 8px; }
   .matched-deal-list-btn.listed { background: var(--marigold); border-color: var(--marigold); }
-  .matched-deals-more { padding: 2px 0 0; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .matched-deals-more {
+    align-self: flex-start; padding: 6px 0 0; margin: 0; border: none; background: none;
+    font-size: 11.5px; font-weight: 700; color: var(--pine); text-decoration: underline;
+  }
   .no-match-text { padding: 2px 16px 10px 56px; font-size: 12px; color: var(--muted); background: var(--cream); }
   .on-list-badge { flex: none; padding: 1px 6px; background: var(--pine); font-size: 9.5px; font-weight: 800; letter-spacing: .05em; color: var(--marigold); }
   #mylist-summary { padding: 12px 16px; background: var(--cream-deep); border-bottom: 1.5px solid var(--pine); display: flex; align-items: baseline; justify-content: space-between; }
@@ -321,6 +340,18 @@
   .sheet-title { font-size: 12.5px; font-weight: 800; letter-spacing: .1em; color: var(--pine); }
   .sheet-close { font-size: 12.5px; font-weight: 800; letter-spacing: .07em; color: var(--pine); background: none; border: none; }
   .sheet-body { padding: 16px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+
+  /* ---------- Item matches sheet (the "+N more" browser) ----------
+     Only this sheet gets a drag handle / drag-to-close -- the other three
+     sheets (filter, ask, item detail, city picker) are left untouched. */
+  .sheet-drag-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--divider); margin: 8px auto 0; flex: none; touch-action: none; }
+  .matches-carousel { overflow: hidden; touch-action: pan-y; }
+  .matches-carousel-track { display: flex; }
+  .matches-card { flex: 0 0 100%; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+  .matches-card-top-line { display: flex; align-items: center; gap: 6px; }
+  .matches-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+  .matches-card-list-btn { flex: none; }
+  #item-matches-position { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
 
   #toast {
     position: fixed; left: 50%; bottom: 16px; z-index: 20;
@@ -655,6 +686,24 @@
     </div>
   </div>
 
+  <!-- ============ Item matches sheet (shopping-list "+N more" browser) ============ -->
+  <div class="sheet-overlay" id="item-matches-overlay">
+    <div class="sheet-scrim" id="item-matches-scrim"></div>
+    <div class="sheet" id="item-matches-sheet" role="dialog" aria-modal="true" aria-labelledby="item-matches-title">
+      <div class="sheet-drag-handle" id="item-matches-drag-handle" aria-hidden="true"></div>
+      <div class="sheet-header">
+        <div class="sheet-title" id="item-matches-title"></div>
+        <button class="sheet-close" id="item-matches-close-btn" type="button">CLOSE ✕</button>
+      </div>
+      <div class="sheet-body">
+        <div class="matches-carousel" id="item-matches-carousel">
+          <div class="matches-carousel-track" id="item-matches-track"></div>
+        </div>
+        <div id="item-matches-position"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ City picker ============ -->
   <div class="sheet-overlay" id="city-picker-overlay">
     <div class="sheet-scrim" id="city-picker-scrim"></div>
@@ -806,6 +855,11 @@
   let shoppingList = loadShoppingList();
   let lastQuestion = '';
   let currentAskSources = [];
+  // Item matches sheet ("+N more" browser) state -- currentMatchesItem is
+  // the shoppingList entry it's open for (null when closed).
+  let currentMatchesItem = null;
+  let currentMatchesRows = [];
+  let currentMatchesIndex = 0;
 
   function loadMyList() {
     try { return JSON.parse(localStorage.getItem('groc_my_list') || '[]'); } catch (e) { return []; }
@@ -853,7 +907,7 @@
     for (const text of parts) {
       const lower = text.toLowerCase();
       if (activeLower.has(lower)) continue;
-      shoppingList.push({ id: makeShoppingListId(), text: text, done: false, addedAt: new Date().toISOString() });
+      shoppingList.push({ id: makeShoppingListId(), text: text, done: false, addedAt: new Date().toISOString(), dismissedIds: [] });
       activeLower.add(lower);
       addedTexts.push(text);
     }
@@ -863,6 +917,7 @@
   function removeShoppingListItem(id) {
     const idx = shoppingList.findIndex(i => String(i.id) === String(id));
     if (idx === -1) return;
+    if (currentMatchesItem && String(currentMatchesItem.id) === String(id)) closeMatchesSheet();
     const removed = shoppingList[idx];
     shoppingList = shoppingList.filter(i => String(i.id) !== String(id));
     saveShoppingList();
@@ -883,21 +938,46 @@
   // this postal code -- simple on purpose (no fuzzy matching library): a
   // flyer's item_name is usually verbose ("Beatrice 2% Milk 4L"), so a plain
   // "milk" reliably matches it, cheapest-first. Unsliced so callers can show
-  // a "+N more" count instead of silently truncating.
-  function allMatchesForText(text) {
+  // a "+N more" count instead of silently truncating. dismissedIds (a
+  // shopping-list item's own "not interested" list, string row ids) is
+  // filtered out here so a dismissed match disappears everywhere at once --
+  // the inline preview, the ON LIST badge, and the full matches sheet all
+  // funnel through this one function.
+  function allMatchesForText(text, dismissedIds) {
     const q = text.trim().toLowerCase();
     if (!q) return [];
+    const dismissed = dismissedIds || [];
     return allResults
-      .filter(row => row.item_name.toLowerCase().includes(q))
+      .filter(row => row.item_name.toLowerCase().includes(q) && !dismissed.includes(String(row.id)))
       .sort((a, b) => priceOrInfinity(a) - priceOrInfinity(b));
   }
   const MATCHED_DEALS_CAP = 3;
-  function matchingDealsForText(text) {
-    return allMatchesForText(text).slice(0, MATCHED_DEALS_CAP);
-  }
   function matchesAnyShoppingListItem(row) {
+    const idStr = String(row.id);
     const name = row.item_name.toLowerCase();
-    return shoppingList.some(i => !i.done && i.text.trim() && name.includes(i.text.trim().toLowerCase()));
+    return shoppingList.some(i => !i.done && i.text.trim() && name.includes(i.text.trim().toLowerCase())
+      && !(i.dismissedIds || []).includes(idStr));
+  }
+  // "Not interested" -- hides one matched deal from one shopping-list item's
+  // future matches (a personal display preference, not a data deletion; it
+  // never touches myList/allResults). Reachable two ways that both write to
+  // the same dismissedIds array: swiping an inline preview row, or the
+  // "Not interested" button on a card inside the full matches sheet.
+  function dismissMatchForItem(item, rowId) {
+    const idStr = String(rowId);
+    item.dismissedIds = item.dismissedIds || [];
+    if (item.dismissedIds.includes(idStr)) return;
+    item.dismissedIds.push(idStr);
+    saveShoppingList();
+    renderMyList();
+    renderDeals(); // dismissing the match that earned a row its ON LIST badge should drop the badge too
+    const row = findRowById(idStr);
+    showToast('Won’t suggest "' + (row ? row.item_name : 'that match') + '" for ' + item.text + ' again.', () => {
+      item.dismissedIds = item.dismissedIds.filter(id => id !== idStr);
+      saveShoppingList();
+      renderMyList();
+      renderDeals();
+    });
   }
 
   function storeInitials(name) {
@@ -1013,7 +1093,7 @@
     const doneShopping = !!row.pickedUp;
     const bgStyle = row.cutout_image_url ? ' style="background-image: url(\'' + row.cutout_image_url.replace(/'/g, "%27") + '\')"' : '';
     const inner = (
-      '<div class="deal-row' + (doneShopping ? ' row-done' : '') + '" data-id="' + row.id + '">' +
+      '<div class="deal-row swipe-target' + (doneShopping ? ' row-done' : '') + '" data-id="' + row.id + '">' +
         (opts.remove
           ? '<label class="check-toggle">' +
               '<input type="checkbox" class="visually-hidden" data-action="check" data-id="' + row.id + '"' + (doneShopping ? ' checked' : '') + '>' +
@@ -1065,7 +1145,7 @@
   // enough shape with a deal row to make a shared template clearer.
   function shoppingItemRowHtml(item) {
     const inner = (
-      '<div class="deal-row shopping-row' + (item.done ? ' row-done' : '') + '" data-id="' + item.id + '">' +
+      '<div class="deal-row swipe-target shopping-row' + (item.done ? ' row-done' : '') + '" data-id="' + item.id + '">' +
         '<label class="check-toggle">' +
           '<input type="checkbox" class="visually-hidden" data-action="shopping-check" data-id="' + item.id + '"' + (item.done ? ' checked' : '') + '>' +
           '<span class="check-box" aria-hidden="true"></span>' +
@@ -1087,11 +1167,15 @@
   // deal row -- pinning a match here is the exact same action as tapping
   // + LIST on the Deals tab, not a second parallel mechanism. Its click
   // handler (attachRowHandlers) stops propagation so it doesn't also open
-  // the row's detail sheet.
-  function matchedDealRowHtml(row) {
+  // the row's detail sheet. Wrapped in the same swipe-wrap pattern as every
+  // other row so it can be swiped away ("not interested") -- dismissal is
+  // scoped to the ONE shopping-list item that produced this match
+  // (data-shopping-item-id), since the same real deal could match a
+  // different typed item too and shouldn't disappear from that one.
+  function matchedDealRowHtml(row, shoppingItemId) {
     const listed = isListed(row);
-    return (
-      '<div class="matched-deal-row" data-id="' + row.id + '">' +
+    const inner = (
+      '<div class="matched-deal-row swipe-target" data-id="' + row.id + '">' +
         '<div class="mono-badge">' + escapeHtml(storeInitials(row.merchant)) + '</div>' +
         '<div class="matched-deal-name">' + escapeHtml(row.item_name) + '</div>' +
         '<div class="matched-deal-price">' + priceText(row) + '</div>' +
@@ -1101,6 +1185,12 @@
         '</button>' +
       '</div>'
     );
+    return (
+      '<div class="swipe-wrap" data-id="' + row.id + '">' +
+        '<div class="swipe-bg" data-action="matched-dismiss" data-id="' + row.id + '" data-shopping-item-id="' + shoppingItemId + '">HIDE</div>' +
+        inner +
+      '</div>'
+    );
   }
 
   function shoppingListSectionHtml() {
@@ -1108,12 +1198,12 @@
       let matchesHtml = '';
       if (!item.done) {
         if (allResults.length > 0) {
-          const all = allMatchesForText(item.text);
+          const all = allMatchesForText(item.text, item.dismissedIds);
           const shown = all.slice(0, MATCHED_DEALS_CAP);
           if (shown.length) {
             const moreCount = all.length - shown.length;
-            matchesHtml = '<div class="matched-deals">' + shown.map(matchedDealRowHtml).join('') +
-              (moreCount > 0 ? '<div class="matched-deals-more">+' + moreCount + ' more match' + (moreCount === 1 ? '' : 'es') + '</div>' : '') +
+            matchesHtml = '<div class="matched-deals">' + shown.map(row => matchedDealRowHtml(row, item.id)).join('') +
+              (moreCount > 0 ? '<button type="button" class="matched-deals-more" data-action="open-matches-sheet" data-id="' + item.id + '">+' + moreCount + ' more match' + (moreCount === 1 ? '' : 'es') + ' — view all</button>' : '') +
               '</div>';
           } else {
             matchesHtml = '<div class="no-match-text">No matching deals yet for "' + escapeHtml(item.text) + '".</div>';
@@ -1123,6 +1213,217 @@
       return '<div class="shopping-item-group">' + shoppingItemRowHtml(item) + matchesHtml + '</div>';
     }).join('');
   }
+
+  // ---------- Item matches sheet (the "+N more" browser) ----------
+  // Shows the FULL sorted match list for one shopping-list item (not just
+  // the 3-item inline preview) as a swipeable, one-at-a-time card carousel --
+  // built for "milk" returning 38 matches with no way to see the rest.
+  function matchesForItem(item) {
+    return allMatchesForText(item.text, item.dismissedIds);
+  }
+
+  function openMatchesSheet(item) {
+    currentMatchesItem = item;
+    currentMatchesRows = matchesForItem(item);
+    currentMatchesIndex = 0;
+    if (!currentMatchesRows.length) return; // shouldn't happen (only opened when moreCount > 0), guard anyway
+    renderMatchesSheet();
+    const overlay = document.getElementById('item-matches-overlay');
+    overlay.classList.add('open');
+    trapFocusIn(overlay);
+  }
+  function closeMatchesSheet() {
+    const overlay = document.getElementById('item-matches-overlay');
+    if (!overlay.classList.contains('open')) return;
+    overlay.classList.remove('open');
+    releaseFocusTrap(overlay);
+    currentMatchesItem = null;
+    currentMatchesRows = [];
+    currentMatchesIndex = 0;
+    // Clear any in-progress drag-to-close transform so the next open starts clean.
+    const sheet = document.getElementById('item-matches-sheet');
+    sheet.style.transition = '';
+    sheet.style.transform = '';
+  }
+
+  function matchesCardHtml(row) {
+    const listed = isListed(row);
+    const suffix = priceSuffixText(row);
+    const bgStyle = row.cutout_image_url ? ' style="background-image: url(\'' + row.cutout_image_url.replace(/'/g, "%27") + '\')"' : '';
+    return (
+      '<div class="matches-card" data-id="' + row.id + '">' +
+        '<div class="deal-image"' + bgStyle + '></div>' +
+        '<div class="matches-card-top-line">' +
+          '<div class="mono-badge">' + escapeHtml(storeInitials(row.merchant)) + '</div>' +
+          '<div class="merchant-name">' + escapeHtml(row.merchant) + '</div>' +
+        '</div>' +
+        '<div class="item-name">' + escapeHtml(row.item_name) + '</div>' +
+        '<div class="price-flag">' +
+          (row.was_price != null ? '<span class="was-price">$' + Number(row.was_price).toFixed(2) + '</span>' : '') +
+          '<span class="cur-price">' + priceText(row) + '</span>' +
+        '</div>' +
+        (suffix ? '<div class="price-suffix">' + escapeHtml(suffix) + '</div>' : '') +
+        '<div class="matches-card-actions">' +
+          '<button type="button" class="list-btn matches-card-list-btn' + (listed ? ' listed' : '') + '" data-action="matches-card-list" data-id="' + row.id + '">' + (listed ? '✓ LISTED' : '+ LIST') + '</button>' +
+          '<button type="button" class="text-link-btn" data-action="matches-card-dismiss" data-id="' + row.id + '">Not interested</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function attachMatchesCardHandlers(container) {
+    container.querySelectorAll('[data-action="matches-card-list"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const row = findRowById(btn.dataset.id);
+        if (!row) return;
+        toggleListed(row);
+        renderDeals();
+        renderMyList();
+        renderMatchesTrack(); // reflect the new pin state on this card without closing the sheet
+      });
+    });
+    container.querySelectorAll('[data-action="matches-card-dismiss"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!currentMatchesItem) return;
+        dismissMatchForItem(currentMatchesItem, btn.dataset.id);
+        currentMatchesRows = matchesForItem(currentMatchesItem);
+        if (!currentMatchesRows.length) { closeMatchesSheet(); return; }
+        if (currentMatchesIndex >= currentMatchesRows.length) currentMatchesIndex = currentMatchesRows.length - 1;
+        renderMatchesSheet();
+      });
+    });
+  }
+
+  function updateMatchesPosition() {
+    document.getElementById('item-matches-position').textContent =
+      currentMatchesRows.length ? (currentMatchesIndex + 1) + ' of ' + currentMatchesRows.length : '';
+  }
+
+  function positionMatchesTrack(animate) {
+    const track = document.getElementById('item-matches-track');
+    track.style.transition = animate ? 'transform .25s ease' : 'none';
+    track.style.transform = 'translateX(' + (-currentMatchesIndex * 100) + '%)';
+  }
+
+  function renderMatchesTrack() {
+    const track = document.getElementById('item-matches-track');
+    track.innerHTML = currentMatchesRows.map(matchesCardHtml).join('');
+    attachMatchesCardHandlers(track);
+    positionMatchesTrack(false);
+    updateMatchesPosition();
+  }
+
+  function renderMatchesSheet() {
+    if (!currentMatchesItem) return;
+    const item = currentMatchesItem;
+    const rows = currentMatchesRows;
+    document.getElementById('item-matches-title').textContent =
+      item.text.toUpperCase() + ' — ' + rows.length + ' MATCH' + (rows.length === 1 ? '' : 'ES');
+    renderMatchesTrack();
+  }
+
+  document.getElementById('item-matches-close-btn').addEventListener('click', closeMatchesSheet);
+  document.getElementById('item-matches-scrim').addEventListener('click', closeMatchesSheet);
+  // Left/right arrow keys page the carousel while the sheet is focus-trapped
+  // open -- cheap, real keyboard parity for what's otherwise a touch gesture.
+  document.getElementById('item-matches-overlay').addEventListener('keydown', (e) => {
+    if (!currentMatchesRows.length) return;
+    if (e.key === 'ArrowRight' && currentMatchesIndex < currentMatchesRows.length - 1) {
+      currentMatchesIndex += 1;
+      positionMatchesTrack(true);
+      updateMatchesPosition();
+    } else if (e.key === 'ArrowLeft' && currentMatchesIndex > 0) {
+      currentMatchesIndex -= 1;
+      positionMatchesTrack(true);
+      updateMatchesPosition();
+    }
+  });
+
+  // Hand-rolled horizontal swipe paging, same pointer-events approach as
+  // attachSwipeHandlers above -- one card at a time, snaps to the nearest
+  // card past a 20%-of-width threshold, springs back otherwise. The
+  // viewport/track elements are static in the DOM (only their content and
+  // transform change), so this attaches once at boot rather than per-render.
+  function attachMatchesCarouselDrag() {
+    const viewport = document.getElementById('item-matches-carousel');
+    const track = document.getElementById('item-matches-track');
+    let startX = 0, startY = 0, dx = 0, dragging = false, decided = false, horizontal = false;
+
+    viewport.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (!currentMatchesRows.length) return;
+      startX = e.clientX; startY = e.clientY; dx = 0; dragging = true; decided = false; horizontal = false;
+      track.style.transition = 'none';
+    });
+    viewport.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const rawDx = e.clientX - startX;
+      const rawDy = e.clientY - startY;
+      if (!decided) {
+        if (Math.abs(rawDx) < 6 && Math.abs(rawDy) < 6) return;
+        decided = true;
+        horizontal = Math.abs(rawDx) > Math.abs(rawDy);
+        if (!horizontal) { dragging = false; return; }
+        if (viewport.setPointerCapture) viewport.setPointerCapture(e.pointerId);
+      }
+      if (!horizontal) return;
+      dx = rawDx;
+      track.style.transform = 'translateX(calc(' + (-currentMatchesIndex * 100) + '% + ' + dx + 'px))';
+    });
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      if (!horizontal) return;
+      const width = viewport.getBoundingClientRect().width || 1;
+      const threshold = width * 0.2;
+      if (dx <= -threshold && currentMatchesIndex < currentMatchesRows.length - 1) {
+        currentMatchesIndex += 1;
+      } else if (dx >= threshold && currentMatchesIndex > 0) {
+        currentMatchesIndex -= 1;
+      }
+      positionMatchesTrack(true);
+      updateMatchesPosition();
+    }
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+  }
+  attachMatchesCarouselDrag();
+
+  // Drag-down-to-close via a dedicated handle -- kept off the carousel body
+  // entirely so a vertical drag-to-close gesture never competes with the
+  // carousel's horizontal swipe-to-page gesture on the same element. Only
+  // this sheet gets this; the other three sheets are untouched.
+  function attachMatchesSheetDragToClose() {
+    const handle = document.getElementById('item-matches-drag-handle');
+    const sheet = document.getElementById('item-matches-sheet');
+    let startY = 0, dy = 0, dragging = false;
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      startY = e.clientY; dy = 0; dragging = true;
+      sheet.style.transition = 'none';
+      if (handle.setPointerCapture) handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      dy = Math.max(0, e.clientY - startY);
+      sheet.style.transform = 'translateY(' + dy + 'px)';
+    });
+    function endDrag() {
+      if (!dragging) return;
+      dragging = false;
+      sheet.style.transition = 'transform .2s ease';
+      if (dy > 100) {
+        closeMatchesSheet();
+      } else {
+        sheet.style.transform = 'translateY(0)';
+      }
+    }
+    handle.addEventListener('pointerup', endDrag);
+    handle.addEventListener('pointercancel', endDrag);
+  }
+  attachMatchesSheetDragToClose();
 
   function removeFromMyList(id) {
     const idx = myList.findIndex(r => String(r.id) === String(id));
@@ -1154,7 +1455,7 @@
   }
   function attachSwipeHandlers(container) {
     container.querySelectorAll('.swipe-wrap').forEach(wrap => {
-      const rowEl = wrap.querySelector('.deal-row');
+      const rowEl = wrap.querySelector('.swipe-target');
       let startX = 0, startY = 0, dx = 0, dragging = false, decided = false, horizontal = false;
       wrap.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -1231,9 +1532,16 @@
     container.querySelectorAll('[data-action="shopping-check"]').forEach(cb => {
       cb.addEventListener('change', () => {
         const item = shoppingList.find(i => String(i.id) === String(cb.dataset.id));
+        if (!item) return;
+        item.done = cb.checked;
+        saveShoppingList();
+        renderMyList();
         // Checking an item off drops its ON LIST badge on the Deals tab too --
         // renderDeals() reflects the same "not-done" rule matchesAnyShoppingListItem uses.
-        if (item) { item.done = cb.checked; saveShoppingList(); renderMyList(); renderDeals(); }
+        renderDeals();
+        // Its matches section just disappeared from the page underneath the
+        // sheet -- close it rather than leave it open on a now-orphaned item.
+        if (item.done && currentMatchesItem && currentMatchesItem.id === item.id) closeMatchesSheet();
       });
     });
     container.querySelectorAll('[data-action="shopping-remove"]').forEach(btn => {
@@ -1256,8 +1564,24 @@
         if (row) { toggleListed(row); renderDeals(); renderMyList(); }
       });
     });
+    container.querySelectorAll('[data-action="matched-dismiss"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openSwipeRowEl = null;
+        const item = shoppingList.find(i => String(i.id) === String(btn.dataset.shoppingItemId));
+        if (item) dismissMatchForItem(item, btn.dataset.id);
+      });
+    });
+    container.querySelectorAll('[data-action="open-matches-sheet"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = shoppingList.find(i => String(i.id) === String(btn.dataset.id));
+        if (item) openMatchesSheet(item);
+      });
+    });
     container.querySelectorAll('.matched-deal-row').forEach(el => {
       el.addEventListener('click', () => {
+        if (el.dataset.revealed === '1') { closeOpenSwipe(); return; }
         const row = findRowById(el.dataset.id);
         if (row) openItemDetail(row);
       });
@@ -1593,6 +1917,7 @@
 
   function archiveMyList() {
     if (!myList.length && !shoppingList.length) return;
+    if (currentMatchesItem) closeMatchesSheet(); // its item is about to be cleared out from under it
     const dealsSnapshot = myList.slice();
     const shoppingSnapshot = shoppingList.slice();
     let archive = [];
@@ -2144,6 +2469,7 @@
     closeFilterSheet();
     closeAskSheet();
     closeCityPicker();
+    closeMatchesSheet();
   });
 
   // ---------- Boot ----------
